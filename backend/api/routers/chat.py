@@ -34,8 +34,7 @@ class ChatResponse(BaseModel):
                     "schema": {
                         "type": "string",
                         "example": (
-                            "event: ai_message\n"
-                            'data: {"chunk": {"content": "Hello!"}}\n\n'
+                            'event: ai_message\ndata: {"chunk": {"content": "Hello!"}}\n\n'
                         ),
                     }
                 }
@@ -49,10 +48,8 @@ async def ai_tim_kiem_chat(payload: ChatRequest) -> StreamingResponse:
 
     async def stream_generator():
         try:
-            async with chat_agent.run_stream(
-                payload.message, deps=ChatDeps()
-            ) as result:
-                async for text_piece in result.stream_text():
+            async with chat_agent.run_stream(payload.message, deps=ChatDeps()) as result:
+                async for text_piece in result.stream_text(delta=True):
                     response = {
                         "chunk": {"content": text_piece},
                         "model": settings.model_name,
@@ -70,9 +67,7 @@ async def ai_tim_kiem_chat(payload: ChatRequest) -> StreamingResponse:
             json_payload = json.dumps(error_response, ensure_ascii=False)
             yield f"event: error\ndata: {json_payload}\n\n"
 
-    return StreamingResponse(
-        stream_generator(), media_type="text/event-stream; charset=utf-8"
-    )
+    return StreamingResponse(stream_generator(), media_type="text/event-stream; charset=utf-8")
 
 
 __all__ = ["router"]
