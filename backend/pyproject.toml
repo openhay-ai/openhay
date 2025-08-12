@@ -13,6 +13,7 @@ dependencies = [
     "pydantic-ai[logfire]>=0.6.2",
     "fastapi>=0.116.1",
     "aiohttp>=3.12.15",
+    "pre-commit>=4.3.0",
 ]
 
 [tool.ruff]
