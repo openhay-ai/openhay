@@ -7,7 +7,7 @@ All colors MUST be HSL.
 */
 
 @layer base {
-  :root {
+:root {
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
 
@@ -17,8 +17,9 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Brand */
+    --primary: 224 76% 48%;
+    --primary-foreground: 0 0% 100%;
 
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
@@ -36,22 +37,26 @@ All colors MUST be HSL.
     --input: 214.3 31.8% 91.4%;
     --ring: 222.2 84% 4.9%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
+    /* Extended brand tokens */
+    --brand-500: 224 76% 48%;
+    --brand-400: 221 83% 60%;
+    --brand-300: 221 89% 67%;
+
+    /* Visual flourishes */
+    --gradient-primary: linear-gradient(135deg, hsl(var(--brand-500)), hsl(var(--brand-400)));
+    --shadow-elegant: 0 10px 30px -10px hsl(var(--brand-500) / 0.35);
+    --shadow-glow: 0 0 40px hsl(var(--brand-300) / 0.4);
+
+    /* Sidebar */
     --sidebar-background: 0 0% 98%;
-
     --sidebar-foreground: 240 5.3% 26.1%;
-
     --sidebar-primary: 240 5.9% 10%;
-
     --sidebar-primary-foreground: 0 0% 98%;
-
     --sidebar-accent: 240 4.8% 95.9%;
-
     --sidebar-accent-foreground: 240 5.9% 10%;
-
     --sidebar-border: 220 13% 91%;
-
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
 
