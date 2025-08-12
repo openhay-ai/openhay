@@ -3,20 +3,16 @@ from __future__ import annotations
 import os
 from datetime import date  # noqa: F401  (reserved for future seeds)
 
-from models import FeatureKey, FeaturePreset
 from sqlalchemy import text
 from sqlmodel import Session, SQLModel, create_engine, select
 
+from backend.core.models import FeatureKey, FeaturePreset
+from backend.settings import settings
 
-def get_database_url() -> str:
-    return os.getenv(
-        "DATABASE_URL",
-        "postgresql+psycopg://postgres:postgres@localhost:5432/aihay",
-    )
+engine = create_engine(settings.database_url, pool_pre_ping=True)
 
 
 def create_all() -> None:
-    engine = create_engine(get_database_url(), pool_pre_ping=True)
     # Ensure required extensions exist before creating tables
     with engine.begin() as conn:
         conn.execute(text("CREATE EXTENSION IF NOT EXISTS pgcrypto"))
@@ -26,7 +22,6 @@ def create_all() -> None:
 
 
 def seed_feature_presets() -> None:
-    engine = create_engine(get_database_url(), pool_pre_ping=True)
     with Session(engine) as session:
         existing = {fp.key for fp in session.exec(select(FeaturePreset)).all()}
         seeds = [
@@ -84,6 +79,11 @@ def seed_feature_presets() -> None:
             print(f"Seeded {len(new_items)} feature presets.")
         else:
             print("Feature presets already present, skipping.")
+
+
+def get_session():
+    with Session(engine) as session:
+        yield session
 
 
 def main() -> None:
