@@ -10,6 +10,7 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import city from "@/assets/thumb-city.jpg";
 import laptop from "@/assets/thumb-laptop.jpg";
 import nature from "@/assets/thumb-nature.jpg";
@@ -42,6 +43,13 @@ const Index = () => {
     }
     return result;
   }, []);
+  const navigate = useNavigate();
+
+  const handleSubmit = (value: string) => {
+    const q = encodeURIComponent(value);
+    navigate(`/f/ai_tim_kiem?q=${q}`);
+  };
+
   return (
     <div className="min-h-screen flex w-full overflow-hidden">
       <SidebarNav />
@@ -87,7 +95,7 @@ const Index = () => {
                 </div>
               </div>
 
-              <PromptInput fixed />
+              <PromptInput fixed onSubmit={handleSubmit} />
             </div>
           </section>
         </main>

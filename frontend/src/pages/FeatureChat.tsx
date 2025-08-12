@@ -1,9 +1,12 @@
 import SidebarNav from "@/components/layout/SidebarNav";
 import { Button } from "@/components/ui/button";
 import PromptInput from "@/components/PromptInput";
-import { useParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
 import { addHistoryEntry } from "@/lib/history";
+import { Markdown } from "@/components/Markdown";
+import { getChatSseUrl } from "@/lib/api";
+import { Loader2 } from "lucide-react";
 
 type ChatMessage = {
   id: string;
@@ -46,6 +49,7 @@ const initialMessagesFor = (key: string | undefined): ChatMessage[] => {
 
 const FeatureChat = () => {
   const { featureKey } = useParams<{ featureKey: string }>();
+  const [searchParams] = useSearchParams();
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessagesFor(featureKey));
   const featureParams = PRESET_DEFAULT_PARAMS[featureKey ?? ""] ?? {};
 
@@ -54,21 +58,138 @@ const FeatureChat = () => {
     setMessages(initialMessagesFor(featureKey));
   }, [featureKey]);
 
+  // auto-send when ?q= is present
+  useEffect(() => {
+    const q = searchParams.get("q");
+    if (!q) return;
+    // Clear param from URL UX-wise is optional; we keep it for now
+    handleSend(q);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const title = PRESET_DISPLAY[featureKey ?? ""]?.title ?? "Trò chuyện";
   const description = PRESET_DISPLAY[featureKey ?? ""]?.description;
+  const endRef = useRef<HTMLDivElement | null>(null);
 
-  const handleSend = (value: string) => {
-    // save to local history
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, [featureKey]);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const abortRef = useRef<AbortController | null>(null);
+
+  const handleSend = async (value: string) => {
     addHistoryEntry({ featureKey: featureKey, content: value });
 
-    const newUser: ChatMessage = { id: crypto.randomUUID(), role: "user", content: value };
-    const newAssistant: ChatMessage = {
-      id: crypto.randomUUID(),
-      role: "assistant",
-      content: "(Đang phát triển) Mô phỏng trả lời cho: " + value +
-        "\n\n" + "[feature params] " + JSON.stringify(featureParams),
-    };
-    setMessages((prev) => [...prev, newUser, newAssistant]);
+    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: value };
+    const assistantMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: "" };
+    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+
+    // cancel previous stream if any
+    if (abortRef.current) {
+      abortRef.current.abort();
+    }
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    try {
+      const res = await fetch(getChatSseUrl(), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: value }),
+        signal: ac.signal,
+      });
+      if (!res.ok || !res.body) {
+        throw new Error(`Bad response: ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+
+      const commitChunk = (chunkContent: string) => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === assistantMsg.id
+              ? { ...m, content: m.content + chunkContent }
+              : m
+          )
+        );
+      };
+
+      // Read SSE stream manually and parse events
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE messages separated by double newlines
+        let idx: number;
+        // eslint-disable-next-line no-cond-assign
+        while ((idx = buffer.indexOf("\n\n")) !== -1) {
+          const rawEvent = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+
+          // Parse event name and data lines
+          const lines = rawEvent.split(/\r?\n/);
+          let eventName = "message";
+          let dataLines: string[] = [];
+          for (const line of lines) {
+            if (line.startsWith("event:")) {
+              eventName = line.slice(6).trim();
+            } else if (line.startsWith("data:")) {
+              dataLines.push(line.slice(5).trim());
+            }
+          }
+          const dataStr = dataLines.join("\n");
+
+          if (eventName === "ai_message") {
+            try {
+              const parsed = JSON.parse(dataStr) as { chunk?: { content?: string } };
+              const chunk = parsed?.chunk?.content ?? "";
+              if (chunk) commitChunk(chunk);
+            } catch {
+              // ignore parse errors per chunk
+            }
+          } else if (eventName === "error") {
+            // surface error to assistant bubble
+            try {
+              const err = JSON.parse(dataStr);
+              commitChunk(`\n\n> Lỗi: ${err?.error || "Không xác định"}`);
+            } catch {
+              commitChunk("\n\n> Lỗi không xác định khi xử lý phản hồi.");
+            }
+          }
+        }
+      }
+
+      // flush remainder if any (not expected for SSE, but defensive)
+      if (buffer.trim().length > 0) {
+        try {
+          const lines = buffer.split(/\r?\n/);
+          let dataLines: string[] = [];
+          for (const line of lines) if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+          const parsed = JSON.parse(dataLines.join("\n"));
+          const chunk = parsed?.chunk?.content ?? "";
+          if (chunk) commitChunk(chunk);
+        } catch {
+          // ignore
+        }
+      }
+    } catch (e) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantMsg.id
+            ? { ...m, content: m.content + "\n\n> Không thể kết nối đến máy chủ." }
+            : m
+        )
+      );
+    }
   };
 
   return (
@@ -111,10 +232,22 @@ const FeatureChat = () => {
                           : "bg-card border")
                       }
                     >
-                      {m.content}
+                      {m.role === "assistant" ? (
+                        m.content.trim().length === 0 ? (
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Loader2 className="size-4 animate-spin" />
+                            <span>Để xem...</span>
+                          </div>
+                        ) : (
+                          <Markdown content={m.content} />
+                        )
+                      ) : (
+                        m.content
+                      )}
                     </div>
                   </div>
                 ))}
+                <div ref={endRef} />
               </div>
 
               <PromptInput onSubmit={handleSend} fixed />
