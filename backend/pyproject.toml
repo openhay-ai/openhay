@@ -1,0 +1,15 @@
+[project]
+name = "open-ai-hay"
+version = "0.1.0"
+description = "Open AI Hay - Hỏi đáp AI nguồn mở cho cộng đồng"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "sqlmodel>=0.0.21",
+    "SQLAlchemy>=2.0.30",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2.7",
+]
+
+[tool.ruff]
+line-length = 100
