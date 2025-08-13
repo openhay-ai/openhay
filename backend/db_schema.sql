@@ -30,7 +30,7 @@ CREATE INDEX IF NOT EXISTS idx_conversation_preset ON conversation (feature_pres
 CREATE TABLE IF NOT EXISTS message (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   conversation_id  uuid NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
-  role             text NOT NULL CHECK (role IN ('user','assistant','system')),
+  role             text NOT NULL CHECK (role IN ('user','assistant','system','tool')),
   content          text NOT NULL,
   metadata         jsonb,
   created_at       timestamptz NOT NULL DEFAULT now()

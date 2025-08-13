@@ -11,7 +11,7 @@ from backend.core.agents.chat.agent import chat_agent
 from backend.core.agents.chat.deps import ChatDeps
 from backend.settings import settings
 
-router = APIRouter(prefix="/api/ai-tim-kiem", tags=["ai_tim_kiem"])
+router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
 class ChatRequest(BaseModel):
@@ -24,7 +24,7 @@ class ChatResponse(BaseModel):
 
 
 @router.post(
-    "/chat",
+    "",
     response_class=StreamingResponse,
     responses={
         200: {

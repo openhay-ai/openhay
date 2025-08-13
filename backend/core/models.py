@@ -8,7 +8,7 @@ from uuid import UUID
 from sqlalchemy import Column, text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TEXT
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.orm import Mapped
+from sqlalchemy.orm import Mapped, relationship
 from sqlmodel import Field, Relationship, SQLModel
 
 
@@ -25,6 +25,7 @@ class MessageRole(str, Enum):
     user = "user"
     assistant = "assistant"
     system = "system"
+    tool = "tool"
 
 
 class FeaturePreset(SQLModel, table=True):
@@ -54,7 +55,7 @@ class FeaturePreset(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     conversations: Mapped[list["Conversation"]] = Relationship(
-        back_populates="feature_preset"
+        sa_relationship=relationship(back_populates="feature_preset")
     )
 
 
@@ -84,11 +85,10 @@ class Conversation(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     feature_preset: Mapped["FeaturePreset"] = Relationship(
-        back_populates="conversations"
+        sa_relationship=relationship(back_populates="conversations")
     )
     messages: Mapped[list["Message"]] = Relationship(
-        back_populates="conversation",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+        sa_relationship=relationship(back_populates="conversation"),
     )
 
 
@@ -101,9 +101,7 @@ class Message(SQLModel, table=True):
             server_default=text("gen_random_uuid()"),
         ),
     )
-    conversation_id: UUID = Field(
-        foreign_key="conversation.id", nullable=False, index=True
-    )
+    conversation_id: UUID = Field(foreign_key="conversation.id", nullable=False, index=True)
     role: MessageRole
     content: str
     metadata_: Optional[dict] = Field(
@@ -112,10 +110,11 @@ class Message(SQLModel, table=True):
     )
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    conversation: Mapped["Conversation"] = Relationship(back_populates="messages")
+    conversation: Mapped["Conversation"] = Relationship(
+        sa_relationship=relationship(back_populates="messages")
+    )
     citations: Mapped[list["MessageCitation"]] = Relationship(
-        back_populates="message",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+        sa_relationship=relationship(back_populates="message")
     )
 
 
@@ -134,7 +133,9 @@ class ArticleSource(SQLModel, table=True):
     rss_url: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    articles: Mapped[list["Article"]] = Relationship(back_populates="source")
+    articles: Mapped[list["Article"]] = Relationship(
+        sa_relationship=relationship(back_populates="source")
+    )
 
 
 class Article(SQLModel, table=True):
@@ -166,8 +167,12 @@ class Article(SQLModel, table=True):
         sa_column=Column("metadata", JSONB),
     )
 
-    source: Mapped[Optional["ArticleSource"]] = Relationship(back_populates="articles")
-    citations: Mapped[list["MessageCitation"]] = Relationship(back_populates="article")
+    source: Mapped["ArticleSource"] = Relationship(
+        sa_relationship=relationship(back_populates="articles")
+    )
+    citations: Mapped[list["MessageCitation"]] = Relationship(
+        sa_relationship=relationship(back_populates="article")
+    )
 
 
 class DailySuggestion(SQLModel, table=True):
@@ -183,8 +188,6 @@ class DailySuggestion(SQLModel, table=True):
     suggestion_date: date
     rank: int
     reason: Optional[str] = None
-
-    article: Mapped["Article"] = Relationship()
 
 
 class MessageCitation(SQLModel, table=True):
@@ -211,5 +214,9 @@ class MessageCitation(SQLModel, table=True):
     offset_end: Optional[int] = None
     snippet: Optional[str] = None
 
-    message: Mapped["Message"] = Relationship(back_populates="citations")
-    article: Mapped["Article"] = Relationship(back_populates="citations")
+    message: Mapped["Message"] = Relationship(
+        sa_relationship=relationship(back_populates="citations")
+    )
+    article: Mapped["Article"] = Relationship(
+        sa_relationship=relationship(back_populates="citations")
+    )

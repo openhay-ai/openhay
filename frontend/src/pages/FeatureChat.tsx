@@ -17,7 +17,7 @@ type ChatMessage = {
 
 // Temporary preset mapping until backend API wiring
 const PRESET_DISPLAY: Record<string, { title: string; description?: string } | undefined> = {
-  default: { title: "AI Tìm kiếm", description: "Hỏi nhanh, có trích nguồn khi có." },
+  default: { title: "AI Tìm kiếm", description: "Hỏi nhanh, trích nguồn." },
   homework: { title: "Giải bài tập", description: "Giải thích từng bước, có ví dụ." },
   writing: { title: "AI Viết văn", description: "Viết mượt, tự nhiên, mạch lạc." },
   translate: { title: "Dịch", description: "Dịch giữ nguyên thuật ngữ, tên riêng." },

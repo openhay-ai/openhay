@@ -6,7 +6,7 @@ export function getApiBaseUrl(): string {
 }
 
 export function getChatSseUrl(): string {
-  return `${getApiBaseUrl()}/api/ai-tim-kiem/chat`;
+  return `${getApiBaseUrl()}/api/chat`;
 }
 
 
