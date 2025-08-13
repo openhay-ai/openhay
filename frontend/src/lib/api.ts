@@ -9,4 +9,12 @@ export function getChatSseUrl(): string {
   return `${getApiBaseUrl()}/api/chat`;
 }
 
+export function getChatHistoryUrl(conversationId: string): string {
+  return `${getApiBaseUrl()}/api/chat/${conversationId}`;
+}
+
+export function getConversationsUrl(): string {
+  return `${getApiBaseUrl()}/api/chat`;
+}
+
 

@@ -7,7 +7,12 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from backend.core.models import Conversation, FeaturePreset, Message
+from backend.core.models import (
+    Conversation,
+    ConversationMessageRun,
+    FeaturePreset,
+    Message,
+)
 
 from .base import BaseRepository
 
@@ -45,6 +50,11 @@ class ConversationRepository(BaseRepository[Conversation]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_all(self) -> list[Conversation]:
+        stmt = select(Conversation).order_by(Conversation.created_at.desc())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def update_title(self, conversation: Conversation, title: Optional[str]) -> Conversation:
         conversation.title = title
         conversation.updated_at = datetime.utcnow()
@@ -72,3 +82,22 @@ class ConversationRepository(BaseRepository[Conversation]):
             await self.add(m)
         await self.flush()
         return list(messages)
+
+    # Conversation message runs
+    async def add_message_run(
+        self, conversation: Conversation, messages_obj: dict | list
+    ) -> ConversationMessageRun:
+        run = ConversationMessageRun(conversation_id=conversation.id, messages=messages_obj)
+        await self.add(run)
+        await self.flush()
+        await self.refresh(run)
+        return run
+
+    async def list_message_runs(self, conversation_id: UUID) -> list[ConversationMessageRun]:
+        stmt = (
+            select(ConversationMessageRun)
+            .where(ConversationMessageRun.conversation_id == conversation_id)
+            .order_by(ConversationMessageRun.created_at.asc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

@@ -37,6 +37,15 @@ CREATE TABLE IF NOT EXISTS message (
 );
 CREATE INDEX IF NOT EXISTS idx_message_conversation_time ON message (conversation_id, created_at);
 
+-- Conversation message runs (stores Pydantic AI messages JSON per run)
+CREATE TABLE IF NOT EXISTS conversation_message_run (
+  id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id  uuid NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
+  messages         jsonb NOT NULL,
+  created_at       timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_conv_run_conversation_time ON conversation_message_run (conversation_id, created_at);
+
 -- Sources
 CREATE TABLE IF NOT EXISTS article_source (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -3,10 +3,9 @@ import { Button } from "@/components/ui/button";
 import PromptInput from "@/components/PromptInput";
 import { useParams, useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useRef, useState, useMemo } from "react";
-import { addHistoryEntry } from "@/lib/history";
 import { Markdown } from "@/components/Markdown";
-import { shortId, slugifyVi } from "@/lib/utils";
-import { getChatSseUrl } from "@/lib/api";
+// no slug needed; route is /t/{uuid}
+import { getChatSseUrl, getChatHistoryUrl } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 
 type ChatMessage = {
@@ -57,12 +56,56 @@ const FeatureChat = () => {
   const location = useLocation();
   const typeParam = searchParams.get("type") ?? undefined;
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessagesFor(typeParam));
+  const messagesRef = useRef<ChatMessage[]>(messages);
   const featureParams = useMemo(() => PRESET_DEFAULT_PARAMS[typeParam ?? "default"] ?? {}, [typeParam]);
 
   // reset initial message when feature type changes
   useEffect(() => {
     setMessages(initialMessagesFor(typeParam));
   }, [typeParam]);
+
+  // keep a ref to latest messages so async handlers can access up-to-date list
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // If navigating from root after first stream, preload messages passed via navigation state
+  useEffect(() => {
+    const st = (location.state as any) || {};
+    const preload = st.preloadMessages as ChatMessage[] | undefined;
+    if (threadId && preload && preload.length > 0) {
+      setMessages(preload);
+    }
+
+    // On hard refresh or direct visit to /t/{uuid}, fetch history
+    const uuidMatch = threadId?.match(
+      /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/
+    );
+    const canonicalId = uuidMatch ? uuidMatch[0] : undefined;
+    if (!canonicalId) return;
+
+    (async () => {
+      try {
+        const res = await fetch(getChatHistoryUrl(canonicalId));
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          conversation_id: string;
+          messages: { role: ChatMessage["role"]; content: string }[];
+        };
+        // Map to UI messages
+        const mapped: ChatMessage[] = data.messages.map((m, idx) => ({
+          id: `${data.conversation_id}-${idx}`,
+          role: m.role,
+          content: m.content,
+        }));
+        // If nothing in history, keep preset welcome
+        setMessages((prev) => (mapped.length > 0 ? mapped : prev));
+      } catch {
+        // ignore fetch errors; keep current state
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threadId]);
 
   // auto-send when ?q= is present (works for both root and thread routes).
   // After consuming q once, remove it from the URL so revisits won't trigger another send.
@@ -89,7 +132,7 @@ const FeatureChat = () => {
     return () => {
       if (abortRef.current) abortRef.current.abort();
     };
-  }, [typeParam, threadId]);
+  }, []);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -98,20 +141,6 @@ const FeatureChat = () => {
   const abortRef = useRef<AbortController | null>(null);
 
   const handleSend = async (value: string) => {
-    // If not in a thread yet, create a thread-like URL and navigate, carrying params
-    if (!threadId) {
-      const slug = slugifyVi(value);
-      const id = shortId();
-      const prettyId = `${slug}-${id}`;
-      const params = new URLSearchParams();
-      if (typeParam) params.set("type", typeParam);
-      params.set("q", value);
-      navigate(`/t/${prettyId}?${params.toString()}`);
-      return;
-    }
-
-    addHistoryEntry({ featureKey: typeParam, content: value });
-
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: value };
     const assistantMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: "" };
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
@@ -124,10 +153,21 @@ const FeatureChat = () => {
     abortRef.current = ac;
 
     try {
+      const extractUuidFromThreadId = (raw?: string): string | undefined => {
+        if (!raw) return undefined;
+        // Try to find a UUID anywhere in the string
+        const uuidMatch = raw.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/);
+        return uuidMatch ? uuidMatch[0] : undefined;
+      };
+
+      const payload: Record<string, unknown> = { message: value };
+      const canonicalId = extractUuidFromThreadId(threadId);
+      if (canonicalId) payload.conversation_id = canonicalId;
+
       const res = await fetch(getChatSseUrl(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: value }),
+        body: JSON.stringify(payload),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) {
@@ -135,7 +175,7 @@ const FeatureChat = () => {
       }
 
       const reader = res.body.getReader();
-      const decoder = new TextDecoder("utf-8");
+      const decoder: any = new TextDecoder("utf-8");
       let buffer = "";
 
       const commitChunk = (chunkContent: string) => {
@@ -149,10 +189,12 @@ const FeatureChat = () => {
       };
 
       // Read SSE stream manually and parse events
+      let createdConversationId: string | null = null;
       while (true) {
-        const { done, value } = await reader.read();
+        const { done, value: chunk } = await reader.read();
         if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+        const bytes: any = chunk as any;
+        buffer += decoder.decode(bytes, { stream: true });
 
         // Process complete SSE messages separated by double newlines
         let idx: number;
@@ -174,7 +216,17 @@ const FeatureChat = () => {
           }
           const dataStr = dataLines.join("\n");
 
-          if (eventName === "ai_message") {
+          if (eventName === "conversation_created") {
+            try {
+              const parsed = JSON.parse(dataStr) as { conversation_id?: string };
+              const cid = parsed?.conversation_id;
+              if (cid) {
+                createdConversationId = cid;
+              }
+            } catch {
+              // ignore navigation errors
+            }
+          } else if (eventName === "ai_message") {
             try {
               const parsed = JSON.parse(dataStr) as { chunk?: { content?: string } };
               const chunk = parsed?.chunk?.content ?? "";
@@ -206,6 +258,16 @@ const FeatureChat = () => {
         } catch {
           // ignore
         }
+      }
+
+      // Only now navigate to /t/{uuid} (after stream completes) to avoid aborting the stream
+      if (!canonicalId && createdConversationId) {
+        const params = new URLSearchParams();
+        if (typeParam) params.set("type", typeParam);
+        navigate(`/t/${createdConversationId}?${params.toString()}`, {
+          replace: true,
+          state: { preloadMessages: messagesRef.current },
+        });
       }
     } catch (e) {
       setMessages((prev) =>

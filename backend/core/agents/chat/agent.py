@@ -1,5 +1,5 @@
 import logfire
-from pydantic_ai import Agent
+from pydantic_ai import Agent, RunContext
 
 from backend.core.agents.chat.deps import ChatDeps
 from backend.core.tools.search import search
@@ -10,6 +10,10 @@ logfire.instrument_pydantic_ai()
 
 # TODO: Improve this later to reduce the token usage for citations
 system_prompt = """
+---
+Current date and time: {current_datetime}
+---
+
 You are a helpful assistant that answers questions in Vietnamese and almost ALWAYS searches the web for the most accurate information.
 
 RESPONSE FORMAT REQUIREMENTS:
@@ -36,8 +40,12 @@ chat_agent = Agent(
     settings.model_name,
     deps_type=ChatDeps,
     output_type=str,
-    system_prompt=system_prompt,
 )
+
+
+@chat_agent.system_prompt
+async def chat_agent_system_prompt(ctx: RunContext[ChatDeps]) -> str:
+    return system_prompt.format(current_datetime=ctx.deps.current_datetime)
 
 
 @chat_agent.tool_plain

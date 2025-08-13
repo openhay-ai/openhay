@@ -90,6 +90,9 @@ class Conversation(SQLModel, table=True):
     messages: Mapped[list["Message"]] = Relationship(
         sa_relationship=relationship(back_populates="conversation"),
     )
+    message_runs: Mapped[list["ConversationMessageRun"]] = Relationship(
+        sa_relationship=relationship(back_populates="conversation")
+    )
 
 
 class Message(SQLModel, table=True):
@@ -101,7 +104,11 @@ class Message(SQLModel, table=True):
             server_default=text("gen_random_uuid()"),
         ),
     )
-    conversation_id: UUID = Field(foreign_key="conversation.id", nullable=False, index=True)
+    conversation_id: UUID = Field(
+        foreign_key="conversation.id",
+        nullable=False,
+        index=True,
+    )
     role: MessageRole
     content: str
     metadata_: Optional[dict] = Field(
@@ -115,6 +122,29 @@ class Message(SQLModel, table=True):
     )
     citations: Mapped[list["MessageCitation"]] = Relationship(
         sa_relationship=relationship(back_populates="message")
+    )
+
+
+class ConversationMessageRun(SQLModel, table=True):
+    __tablename__ = "conversation_message_run"
+    id: UUID = Field(
+        sa_column=Column(
+            PGUUID(as_uuid=True),
+            primary_key=True,
+            server_default=text("gen_random_uuid()"),
+        ),
+    )
+    conversation_id: UUID = Field(foreign_key="conversation.id", nullable=False, index=True)
+    # Stored as JSONB list of ModelMessage
+    # (via ModelMessagesTypeAdapter.to_jsonable_python)
+    messages: dict | list = Field(
+        sa_column=Column("messages", JSONB, nullable=False),
+        default_factory=list,
+    )
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    conversation: Mapped["Conversation"] = Relationship(
+        sa_relationship=relationship(back_populates="message_runs")
     )
 
 
