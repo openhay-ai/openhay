@@ -10,7 +10,8 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { slugifyVi, shortId } from "@/lib/utils";
 import city from "@/assets/thumb-city.jpg";
 import laptop from "@/assets/thumb-laptop.jpg";
 import nature from "@/assets/thumb-nature.jpg";
@@ -44,10 +45,17 @@ const Index = () => {
     return result;
   }, []);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const handleSubmit = (value: string) => {
-    const q = encodeURIComponent(value);
-    navigate(`/f/ai_tim_kiem?q=${q}`);
+    const currentType = searchParams.get("type") ?? undefined;
+    const slug = slugifyVi(value);
+    const id = shortId();
+    const prettyId = `${slug}-${id}`;
+    const params = new URLSearchParams();
+    if (currentType) params.set("type", currentType);
+    params.set("q", value);
+    navigate(`/t/${prettyId}?${params.toString()}`);
   };
 
   return (

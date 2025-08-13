@@ -1,10 +1,11 @@
 import SidebarNav from "@/components/layout/SidebarNav";
 import { Button } from "@/components/ui/button";
 import PromptInput from "@/components/PromptInput";
-import { useParams, useSearchParams } from "react-router-dom";
-import { useEffect, useRef, useState } from "react";
+import { useParams, useSearchParams, useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useRef, useState, useMemo } from "react";
 import { addHistoryEntry } from "@/lib/history";
 import { Markdown } from "@/components/Markdown";
+import { shortId, slugifyVi } from "@/lib/utils";
 import { getChatSseUrl } from "@/lib/api";
 import { Loader2 } from "lucide-react";
 
@@ -16,27 +17,27 @@ type ChatMessage = {
 
 // Temporary preset mapping until backend API wiring
 const PRESET_DISPLAY: Record<string, { title: string; description?: string } | undefined> = {
-  ai_tim_kiem: { title: "AI Tìm kiếm", description: "Hỏi nhanh, có trích nguồn khi có." },
-  giai_bai_tap: { title: "Giải bài tập", description: "Giải thích từng bước, có ví dụ." },
-  ai_viet_van: { title: "AI Viết văn", description: "Viết mượt, tự nhiên, mạch lạc." },
-  dich: { title: "Dịch", description: "Dịch giữ nguyên thuật ngữ, tên riêng." },
-  tom_tat: { title: "Tóm tắt", description: "Tóm tắt trọng tâm ngắn gọn." },
+  default: { title: "AI Tìm kiếm", description: "Hỏi nhanh, có trích nguồn khi có." },
+  homework: { title: "Giải bài tập", description: "Giải thích từng bước, có ví dụ." },
+  writing: { title: "AI Viết văn", description: "Viết mượt, tự nhiên, mạch lạc." },
+  translate: { title: "Dịch", description: "Dịch giữ nguyên thuật ngữ, tên riêng." },
+  summary: { title: "Tóm tắt", description: "Tóm tắt trọng tâm ngắn gọn." },
   mindmap: { title: "Mindmap", description: "Lập sơ đồ ý dạng cây." },
 };
 
-// Default params mirroring backend seeds in `backend/db_init.py`
+// Default params
 const PRESET_DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
-  ai_tim_kiem: {},
-  giai_bai_tap: { show_steps: true },
-  ai_viet_van: { length: "medium", tone: "trung_lap" },
-  dich: { source_lang: "vi", target_lang: "en" },
-  tom_tat: { bullet_count: 5 },
+  default: {},
+  homework: { show_steps: true },
+  writing: { length: "medium", tone: "trung_lap" },
+  translate: { source_lang: "vi", target_lang: "en" },
+  summary: { bullet_count: 5 },
   mindmap: { max_depth: 3 },
 };
 
-const initialMessagesFor = (key: string | undefined): ChatMessage[] => {
-  if (!key) return [];
-  const preset = PRESET_DISPLAY[key];
+const initialMessagesFor = (typeParam: string | undefined): ChatMessage[] => {
+  const effectiveType = typeParam && PRESET_DISPLAY[typeParam] ? typeParam : "default";
+  const preset = PRESET_DISPLAY[effectiveType];
   if (!preset) return [];
   return [
     {
@@ -47,35 +48,48 @@ const initialMessagesFor = (key: string | undefined): ChatMessage[] => {
   ];
 };
 
+// moved to utils: slugifyVi, shortId
+
 const FeatureChat = () => {
-  const { featureKey } = useParams<{ featureKey: string }>();
+  const { threadId } = useParams<{ threadId?: string }>();
   const [searchParams] = useSearchParams();
-  const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessagesFor(featureKey));
-  const featureParams = PRESET_DEFAULT_PARAMS[featureKey ?? ""] ?? {};
+  const navigate = useNavigate();
+  const location = useLocation();
+  const typeParam = searchParams.get("type") ?? undefined;
+  const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessagesFor(typeParam));
+  const featureParams = useMemo(() => PRESET_DEFAULT_PARAMS[typeParam ?? "default"] ?? {}, [typeParam]);
 
-  // reset initial message when feature changes
+  // reset initial message when feature type changes
   useEffect(() => {
-    setMessages(initialMessagesFor(featureKey));
-  }, [featureKey]);
+    setMessages(initialMessagesFor(typeParam));
+  }, [typeParam]);
 
-  // auto-send when ?q= is present
+  // auto-send when ?q= is present (works for both root and thread routes).
+  // After consuming q once, remove it from the URL so revisits won't trigger another send.
   useEffect(() => {
     const q = searchParams.get("q");
     if (!q) return;
-    // Clear param from URL UX-wise is optional; we keep it for now
-    handleSend(q);
+    (async () => {
+      await handleSend(q);
+      // Only remove q if we are already in a thread; otherwise, let the thread page remove it
+      if (threadId) {
+        const params = new URLSearchParams(searchParams);
+        params.delete("q");
+        navigate({ pathname: location.pathname, search: params.toString() ? `?${params.toString()}` : "" }, { replace: true });
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [threadId]);
 
-  const title = PRESET_DISPLAY[featureKey ?? ""]?.title ?? "Trò chuyện";
-  const description = PRESET_DISPLAY[featureKey ?? ""]?.description;
+  const title = PRESET_DISPLAY[typeParam ?? "default"]?.title ?? "Trò chuyện";
+  const description = PRESET_DISPLAY[typeParam ?? "default"]?.description;
   const endRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     return () => {
       if (abortRef.current) abortRef.current.abort();
     };
-  }, [featureKey]);
+  }, [typeParam, threadId]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -84,7 +98,19 @@ const FeatureChat = () => {
   const abortRef = useRef<AbortController | null>(null);
 
   const handleSend = async (value: string) => {
-    addHistoryEntry({ featureKey: featureKey, content: value });
+    // If not in a thread yet, create a thread-like URL and navigate, carrying params
+    if (!threadId) {
+      const slug = slugifyVi(value);
+      const id = shortId();
+      const prettyId = `${slug}-${id}`;
+      const params = new URLSearchParams();
+      if (typeParam) params.set("type", typeParam);
+      params.set("q", value);
+      navigate(`/t/${prettyId}?${params.toString()}`);
+      return;
+    }
+
+    addHistoryEntry({ featureKey: typeParam, content: value });
 
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: value };
     const assistantMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: "" };

@@ -10,11 +10,11 @@ interface Item {
 
 const primaryItems: Array<Item & { to?: string }> = [
   { label: "AI Tìm kiếm", icon: Home, to: "/" },
-  { label: "Giải bài tập", icon: GraduationCap, to: "/f/giai_bai_tap" },
-  { label: "AI Viết văn", icon: PenLine, to: "/f/ai_viet_van" },
-  { label: "Dịch", icon: Languages, to: "/f/dich" },
-  { label: "Tóm tắt", icon: Zap, to: "/f/tom_tat" },
-  { label: "Mindmap", icon: Brain, to: "/f/mindmap" },
+  { label: "Giải bài tập", icon: GraduationCap, to: "/?type=homework" },
+  { label: "AI Viết văn", icon: PenLine, to: "/?type=writing" },
+  { label: "Dịch", icon: Languages, to: "/?type=translate" },
+  { label: "Tóm tắt", icon: Zap, to: "/?type=summary" },
+  { label: "Mindmap", icon: Brain, to: "/?type=mindmap" },
   { label: "Lịch sử", icon: History, to: "/history" },
 ];
 
@@ -35,7 +35,25 @@ export const SidebarNav = () => {
         <ul className="space-y-1">
           {primaryItems.map((item, idx) => {
             const Icon = item.icon;
-            const active = item.to ? location.pathname === item.to : idx === 0;
+            const active = (() => {
+              if (!item.to) return idx === 0;
+              const linkUrl = new URL(item.to, window.location.origin);
+              const linkType = new URLSearchParams(linkUrl.search).get("type");
+              const currentParams = new URLSearchParams(location.search);
+              const currentType = currentParams.get("type");
+              const onRootOrThread = location.pathname === "/" || location.pathname.startsWith("/t/");
+
+              // Default mode (no type): active on root or thread when no type set
+              if (linkUrl.pathname === "/" && !linkType) {
+                return onRootOrThread && !currentType;
+              }
+              // Typed modes: active when current type matches irrespective of extra params like q
+              if (linkUrl.pathname === "/" && linkType) {
+                return onRootOrThread && currentType === linkType;
+              }
+              // Other direct links (e.g., /history)
+              return location.pathname === item.to;
+            })();
             return (
               <li key={item.label}>
                 {item.to ? (
