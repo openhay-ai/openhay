@@ -5,6 +5,7 @@ from datetime import datetime
 from uuid import UUID
 
 import logfire
+from backend.api.routers.models.responses import ConversationHistoryResponse
 from backend.core.agents.chat.agent import chat_agent
 from backend.core.agents.chat.deps import ChatDeps
 from backend.core.mixins import ConversationMixin
@@ -25,11 +26,6 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 class ChatRequest(ConversationMixin):
     message: str
-
-
-class ChatResponse(BaseModel):
-    answer: str
-    model: str
 
 
 class ConversationListItem(BaseModel):
@@ -219,7 +215,7 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                         }
                         json_payload = json.dumps(response, ensure_ascii=False)
                         sse_message = f"event: ai_message\ndata: {json_payload}\n\n"
-                        logger.debug(f"SSE message: {sse_message}")
+                        logger.debug(f"SSE message: {sse_message[:100]}...")
                         yield sse_message
 
                     # Persist the structured run for perfect reconstruction
@@ -253,7 +249,7 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                         if search_results:
                             evt_payload = {"results": search_results}
                             evt_payload_json = json.dumps(evt_payload, ensure_ascii=False)
-                            logger.debug(f"SSE search_results message: {evt_payload_json}")
+                            logger.debug(f"SSE search_results message: {evt_payload_json[:100]}...")
                             yield (f"event: search_results\ndata: {evt_payload_json}\n\n")
 
                         # Convert to jsonable python to avoid non-serializables
@@ -290,105 +286,36 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
     )
 
 
-@router.get("/{conversation_id}")
+@router.get("/{conversation_id}", response_model=ConversationHistoryResponse)
 async def get_conversation_history(conversation_id: UUID) -> dict:
     """Return flattened message history for a conversation."""
     async with AsyncSessionLocal() as session:
         conversation_repo = ConversationRepository(session)
         conversation = await conversation_repo.get_by_id(conversation_id)
+
         if conversation is None:
             raise HTTPException(
                 status_code=404,
                 detail="Conversation not found",
             )
 
-        messages: list[dict[str, str]] = []
         runs = await conversation_repo.list_message_runs(conversation_id)
 
+        all_messages = []
         for run in runs:
             try:
-                objs = ModelMessagesTypeAdapter.validate_python(run.messages)
+                # Flatten the messages into a list of parts
+                messages = ModelMessagesTypeAdapter.validate_python(run.messages)
+                messages = [part for message in messages for part in message.parts]
+                all_messages.extend(messages)
             except Exception:
-                objs = []
+                raise
 
-            for msg in objs:
-                kind = msg.get("kind") if isinstance(msg, dict) else getattr(msg, "kind", None)
-                parts = msg.get("parts") if isinstance(msg, dict) else getattr(msg, "parts", None)
-                if not isinstance(parts, list):
-                    continue
-
-                text: str = ""
-                if kind == "request":
-                    for part in parts:
-                        pk = (
-                            part.get("part_kind")
-                            if isinstance(part, dict)
-                            else getattr(part, "part_kind", None)
-                        )
-                        if pk != "user-prompt":
-                            continue
-                        cval = (
-                            part.get("content")
-                            if isinstance(part, dict)
-                            else getattr(part, "content", None)
-                        )
-                        if isinstance(cval, str):
-                            text = cval
-                        elif isinstance(cval, list):
-                            tmp: list[str] = []
-                            for sub in cval:
-                                if isinstance(sub, str):
-                                    tmp.append(sub)
-                                elif isinstance(sub, dict):
-                                    tv = sub.get("text") or sub.get("content")
-                                    if isinstance(tv, str):
-                                        tmp.append(tv)
-                            text = "\n".join(tmp)
-                        break
-                    if text:
-                        messages.append(
-                            {
-                                "role": "user",
-                                "content": text,
-                            }
-                        )
-                elif kind == "response":
-                    tmp: list[str] = []
-                    for part in parts:
-                        pk = (
-                            part.get("part_kind")
-                            if isinstance(part, dict)
-                            else getattr(part, "part_kind", None)
-                        )
-                        if pk != "text":
-                            continue
-                        tv = (
-                            part.get("content")
-                            if isinstance(part, dict)
-                            else getattr(part, "content", None)
-                        )
-                        if not isinstance(tv, str):
-                            tv = (
-                                part.get("text")
-                                if isinstance(part, dict)
-                                else getattr(part, "text", None)
-                            )
-                        if isinstance(tv, str):
-                            tmp.append(tv)
-                    text = "\n".join(tmp)
-                    if text:
-                        messages.append(
-                            {
-                                "role": "assistant",
-                                "content": text,
-                            }
-                        )
-
-        logfire.info("Messages:", messages=messages)
-        return {
-            "conversation_id": str(conversation_id),
-            "messages": messages,
-        }
+        logfire.info("Messages", messages=all_messages)
+        return ConversationHistoryResponse(
+            conversation_id=conversation_id,
+            messages=all_messages,
+        )
 
 
 __all__ = ["router"]

@@ -18,8 +18,10 @@ import { Card, CardContent } from "@/components/ui/card";
 
 type ChatMessage = {
   id: string;
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "system" | "tool";
   content: string;
+  toolName?: string;
+  results?: any[];
 };
 
 // Temporary preset mapping until backend API wiring
@@ -64,10 +66,7 @@ const FeatureChat = () => {
   const location = useLocation();
   const typeParam = searchParams.get("type") ?? undefined;
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessagesFor(typeParam));
-  // Holds the search_web tool results for the latest run
-  const [lastSearchResults, setLastSearchResults] = useState<any[] | null>(null);
   const messagesRef = useRef<ChatMessage[]>(messages);
-  const lastSearchResultsRef = useRef<any[] | null>(null);
   const featureParams = useMemo(() => PRESET_DEFAULT_PARAMS[typeParam ?? "default"] ?? {}, [typeParam]);
 
   // reset initial message when feature type changes
@@ -87,11 +86,7 @@ const FeatureChat = () => {
     if (threadId && preload && preload.length > 0) {
       setMessages(preload);
     }
-    const preloadSearchResults = st.preloadSearchResults as any[] | null | undefined;
-    if (Array.isArray(preloadSearchResults)) {
-      setLastSearchResults(preloadSearchResults);
-      lastSearchResultsRef.current = preloadSearchResults;
-    }
+    // no separate preload for search results; they are embedded as tool messages now
 
     // On hard refresh or direct visit to /t/{uuid}, fetch history
     const uuidMatch = threadId?.match(
@@ -106,14 +101,27 @@ const FeatureChat = () => {
         if (!res.ok) return;
         const data = (await res.json()) as {
           conversation_id: string;
-          messages: { role: ChatMessage["role"]; content: string }[];
+          messages: any[];
         };
-        // Map to UI messages
-        const mapped: ChatMessage[] = data.messages.map((m, idx) => ({
-          id: `${data.conversation_id}-${idx}`,
-          role: m.role,
-          content: m.content,
-        }));
+        // Map to UI messages from new ConversationHistoryResponse parts
+        const mapped: ChatMessage[] = [];
+        for (let idx = 0; idx < data.messages.length; idx++) {
+          const part: any = data.messages[idx];
+          const id = `${data.conversation_id}-${idx}`;
+          const partKind: string | undefined = part?.part_kind;
+          if (partKind === "user-prompt") {
+            const content = typeof part?.content === "string" ? part.content : "";
+            mapped.push({ id, role: "user", content });
+          } else if (partKind === "text") {
+            const content = typeof part?.content === "string" ? part.content : "";
+            mapped.push({ id, role: "assistant", content });
+          } else if (partKind === "tool-return" && part?.tool_name === "search_web") {
+            const results = Array.isArray(part?.content) ? part.content : [];
+            mapped.push({ id, role: "tool", content: "", toolName: "search_web", results });
+          } else {
+            // ignore other parts (e.g., tool-call, other tools) for UI
+          }
+        }
         // If nothing in history, keep preset welcome
         setMessages((prev) => (mapped.length > 0 ? mapped : prev));
       } catch {
@@ -253,16 +261,27 @@ const FeatureChat = () => {
               // ignore parse errors per chunk
             }
           } else if (eventName === "search_results") {
-            // Final search_web tool results
+            // Append search_web tool results as their own message
             try {
               const parsed = JSON.parse(dataStr) as { results?: any[] };
               const results = Array.isArray(parsed?.results) ? parsed.results : [];
-              setLastSearchResults(results);
-              lastSearchResultsRef.current = results;
-
-              console.log("lastSearchResults", parsed?.results);
+              const toolMsg: ChatMessage = {
+                id: crypto.randomUUID(),
+                role: "tool",
+                content: "",
+                toolName: "search_web",
+                results,
+              };
+              setMessages((prev) => {
+                const idx = prev.findIndex((m) => m.id === assistantMsg.id);
+                if (idx === -1) {
+                  return [...prev, toolMsg];
+                }
+                const next = prev.slice();
+                next.splice(idx, 0, toolMsg);
+                return next;
+              });
             } catch {
-              console.log("search_results error", dataStr);
               // ignore
             }
           } else if (eventName === "error") {
@@ -295,9 +314,9 @@ const FeatureChat = () => {
       if (!canonicalId && createdConversationId) {
         const params = new URLSearchParams();
         if (typeParam) params.set("type", typeParam);
-        navigate(`/t/${createdConversationId}?${params.toString()}`, {
+        navigate(`/t/${createdConversationId}?${params.toString()}` , {
           replace: true,
-          state: { preloadMessages: messagesRef.current, preloadSearchResults: lastSearchResultsRef.current },
+          state: { preloadMessages: messagesRef.current },
         });
       }
     } catch (e) {
@@ -364,69 +383,71 @@ const FeatureChat = () => {
             <div className="flex flex-col gap-4 mt-6">
               {/* Messages */}
               <div className="space-y-3">
-                {messages.map((m) => (
-                  <div
-                    key={m.id}
-                    className={
-                      m.role === "user"
-                        ? "flex justify-end"
-                        : "flex justify-start"
-                    }
-                  >
+                {messages.map((m) => {
+                  if (m.role === "tool" && m.toolName === "search_web") {
+                    const results = Array.isArray(m.results) ? m.results : [];
+                    return (
+                      <div key={m.id} className="flex justify-start">
+                        <div className="max-w-[80%] w-full">
+                          <div className="rounded-lg border bg-muted/30 p-3">
+                            <div className="flex items-center justify-between">
+                              <div className="text-sm font-medium text-muted-foreground">
+                                {results.length} nguồn
+                              </div>
+                            </div>
+                            <div className="relative mt-3">
+                              <Carousel opts={{ align: "start" }} className="w-full">
+                                <CarouselContent>
+                                  {results.map((it, idx) => (
+                                    <CarouselItem
+                                      key={idx}
+                                      className="basis-full sm:basis-1/2 lg:basis-1/3"
+                                    >
+                                      <SourceCard item={it} index={idx} />
+                                    </CarouselItem>
+                                  ))}
+                                </CarouselContent>
+                                <CarouselPrevious className="-left-5" />
+                                <CarouselNext className="-right-5" />
+                              </Carousel>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
                     <div
+                      key={m.id}
                       className={
-                        "max-w-[80%] rounded-2xl px-4 py-2 text-sm " +
-                        (m.role === "user"
-                          ? "bg-emerald-600 text-white"
-                          : "bg-card border")
+                        m.role === "user" ? "flex justify-end" : "flex justify-start"
                       }
                     >
-                      {m.role === "assistant" ? (
-                        m.content.trim().length === 0 ? (
-                          <div className="flex items-center gap-2 text-muted-foreground">
-                            <Loader2 className="size-4 animate-spin" />
-                            <span>Để xem...</span>
-                          </div>
+                      <div
+                        className={
+                          "max-w-[80%] rounded-2xl px-4 py-2 text-sm " +
+                          (m.role === "user" ? "bg-emerald-600 text-white" : "bg-card border")
+                        }
+                      >
+                        {m.role === "assistant" ? (
+                          m.content.trim().length === 0 ? (
+                            <div className="flex items-center gap-2 text-muted-foreground">
+                              <Loader2 className="size-4 animate-spin" />
+                              <span>Để xem...</span>
+                            </div>
+                          ) : (
+                            <Markdown content={m.content} />
+                          )
                         ) : (
-                          <Markdown content={m.content} />
-                        )
-                      ) : (
-                        m.content
-                      )}
+                          m.content
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div ref={endRef} />
               </div>
-
-              {Array.isArray(lastSearchResults) && lastSearchResults.length > 0 && (
-                <div className="rounded-lg border bg-muted/30 p-3">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium text-muted-foreground">
-                      {lastSearchResults.length} nguồn
-                    </div>
-                  </div>
-                  <div className="relative mt-3">
-                    <Carousel
-                      opts={{ align: "start" }}
-                      className="w-full"
-                    >
-                      <CarouselContent>
-                        {lastSearchResults.map((it, idx) => (
-                          <CarouselItem
-                            key={idx}
-                            className="basis-full sm:basis-1/2 lg:basis-1/3"
-                          >
-                            <SourceCard item={it} index={idx} />
-                          </CarouselItem>
-                        ))}
-                      </CarouselContent>
-                      <CarouselPrevious className="-left-5" />
-                      <CarouselNext className="-right-5" />
-                    </Carousel>
-                  </div>
-                </div>
-              )}
 
               <PromptInput onSubmit={handleSend} fixed />
             </div>
