@@ -119,4 +119,10 @@ CREATE TRIGGER trg_message_touch_conversation
 AFTER INSERT ON message
 FOR EACH ROW EXECUTE FUNCTION touch_conversation_updated_at();
 
+-- Also touch conversation.updated_at when a run is inserted
+DROP TRIGGER IF EXISTS trg_conv_run_touch_conversation ON conversation_message_run;
+CREATE TRIGGER trg_conv_run_touch_conversation
+AFTER INSERT ON conversation_message_run
+FOR EACH ROW EXECUTE FUNCTION touch_conversation_updated_at();
+
 

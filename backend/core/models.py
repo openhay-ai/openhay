@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from enum import Enum
 from typing import List, Optional
 from uuid import UUID
@@ -52,7 +52,7 @@ class FeaturePreset(SQLModel, table=True):
         default=None,
         sa_column=Column(JSONB),
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     conversations: Mapped[list["Conversation"]] = Relationship(
         sa_relationship=relationship(back_populates="feature_preset")
@@ -81,8 +81,8 @@ class Conversation(SQLModel, table=True):
             server_default="{}",
         ),
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     feature_preset: Mapped["FeaturePreset"] = Relationship(
         sa_relationship=relationship(back_populates="conversations")
@@ -115,7 +115,7 @@ class Message(SQLModel, table=True):
         default=None,
         sa_column=Column("metadata", JSONB),
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     conversation: Mapped["Conversation"] = Relationship(
         sa_relationship=relationship(back_populates="messages")
@@ -141,7 +141,7 @@ class ConversationMessageRun(SQLModel, table=True):
         sa_column=Column("messages", JSONB, nullable=False),
         default_factory=list,
     )
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     conversation: Mapped["Conversation"] = Relationship(
         sa_relationship=relationship(back_populates="message_runs")
@@ -161,7 +161,7 @@ class ArticleSource(SQLModel, table=True):
     name: str
     homepage_url: Optional[str] = None
     rss_url: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     articles: Mapped[list["Article"]] = Relationship(
         sa_relationship=relationship(back_populates="source")
@@ -191,7 +191,7 @@ class Article(SQLModel, table=True):
     )
     image_url: Optional[str] = None
     published_at: Optional[datetime] = None
-    fetched_at: datetime = Field(default_factory=datetime.utcnow)
+    fetched_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metadata_: Optional[dict] = Field(
         default=None,
         sa_column=Column("metadata", JSONB),

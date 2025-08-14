@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 from typing import AsyncGenerator
 
+from backend.core.models import FeatureKey, FeaturePreset
+from backend.settings import settings
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -12,15 +14,12 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlmodel import SQLModel, select
 
-from backend.core.models import FeatureKey, FeaturePreset
-from backend.settings import settings
-
 
 def _to_async_url(url: str) -> str:
     # Normalize URL to async driver without forcing the user to change envs
     if url.startswith("postgresql+asyncpg://") or url.startswith("postgresql+psycopg://"):
         return url
-    if url.startswith("postgresql://") or url.startswith("postgres://"):
+    if url.startswith(("postgresql://", "postgres://")):
         return url.replace("postgresql://", "postgresql+psycopg://").replace(
             "postgres://", "postgresql+psycopg://"
         )
@@ -30,6 +29,7 @@ def _to_async_url(url: str) -> str:
 async_engine: AsyncEngine = create_async_engine(
     _to_async_url(settings.database_url),
     pool_pre_ping=True,
+    connect_args={"options": "-c timezone=utc"},
 )
 AsyncSessionLocal = async_sessionmaker(
     bind=async_engine, expire_on_commit=False, class_=AsyncSession
@@ -49,6 +49,47 @@ async def create_all() -> None:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm"))
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS unaccent"))
         await conn.run_sync(SQLModel.metadata.create_all)
+        # Create or replace trigger function to touch conversation.updated_at
+        await conn.execute(
+            text(
+                """
+                CREATE OR REPLACE FUNCTION touch_conversation_updated_at()
+                RETURNS trigger AS $$
+                BEGIN
+                  UPDATE conversation SET updated_at = now()
+                  WHERE id = NEW.conversation_id;
+                  RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql;
+                """
+            )
+        )
+        # Ensure triggers exist for both message and
+        # conversation_message_run tables
+        await conn.execute(
+            text(
+                """
+                DROP TRIGGER IF EXISTS trg_message_touch_conversation
+                ON message;
+                CREATE TRIGGER trg_message_touch_conversation
+                AFTER INSERT ON message
+                FOR EACH ROW EXECUTE FUNCTION
+                  touch_conversation_updated_at();
+                """
+            )
+        )
+        await conn.execute(
+            text(
+                """
+                DROP TRIGGER IF EXISTS trg_conv_run_touch_conversation
+                ON conversation_message_run;
+                CREATE TRIGGER trg_conv_run_touch_conversation
+                AFTER INSERT ON conversation_message_run
+                FOR EACH ROW EXECUTE FUNCTION
+                  touch_conversation_updated_at();
+                """
+            )
+        )
 
 
 async def seed_feature_presets() -> None:

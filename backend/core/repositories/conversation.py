@@ -4,15 +4,14 @@ from datetime import datetime
 from typing import Iterable, Optional
 from uuid import UUID
 
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
-
 from backend.core.models import (
     Conversation,
     ConversationMessageRun,
     FeaturePreset,
     Message,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 
 from .base import BaseRepository
 
@@ -57,14 +56,18 @@ class ConversationRepository(BaseRepository[Conversation]):
 
     async def update_title(self, conversation: Conversation, title: Optional[str]) -> Conversation:
         conversation.title = title
-        conversation.updated_at = datetime.utcnow()
+        from datetime import timezone
+
+        conversation.updated_at = datetime.now(timezone.utc)
         await self.flush()
         await self.refresh(conversation)
         return conversation
 
     async def update_feature_params(self, conversation: Conversation, params: dict) -> Conversation:
         conversation.feature_params = params
-        conversation.updated_at = datetime.utcnow()
+        from datetime import timezone
+
+        conversation.updated_at = datetime.now(timezone.utc)
         await self.flush()
         await self.refresh(conversation)
         return conversation
@@ -87,7 +90,10 @@ class ConversationRepository(BaseRepository[Conversation]):
     async def add_message_run(
         self, conversation: Conversation, messages_obj: dict | list
     ) -> ConversationMessageRun:
-        run = ConversationMessageRun(conversation_id=conversation.id, messages=messages_obj)
+        run = ConversationMessageRun(
+            conversation_id=conversation.id,
+            messages=messages_obj,
+        )
         await self.add(run)
         await self.flush()
         await self.refresh(run)
