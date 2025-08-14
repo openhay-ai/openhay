@@ -293,10 +293,6 @@ const FeatureChat = () => {
                 <p className="text-muted-foreground text-sm">{description}</p>
               )}
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm">Đăng nhập</Button>
-              <Button variant="hero" size="sm">Tạo tài khoản miễn phí</Button>
-            </div>
           </header>
 
           <section className="max-w-3xl mx-auto pb-40">
