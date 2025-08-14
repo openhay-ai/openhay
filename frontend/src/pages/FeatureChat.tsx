@@ -6,7 +6,7 @@ import { useEffect, useRef, useState, useMemo } from "react";
 import { Markdown } from "@/components/Markdown";
 // no slug needed; route is /t/{uuid}
 import { getChatSseUrl, getChatHistoryUrl } from "@/lib/api";
-import { Loader2 } from "lucide-react";
+import { Loader2, ChevronDown } from "lucide-react";
 import {
   Carousel,
   CarouselContent,
@@ -69,10 +69,12 @@ const FeatureChat = () => {
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const messagesRef = useRef<ChatMessage[]>(messages);
   const featureParams = useMemo(() => PRESET_DEFAULT_PARAMS[typeParam ?? "default"] ?? {}, [typeParam]);
+  const [sourceExpanded, setSourceExpanded] = useState<Record<string, boolean>>({});
 
   // reset initial message when feature type changes
   useEffect(() => {
     setMessages(initialMessagesFor(typeParam));
+    setSourceExpanded({});
   }, [typeParam]);
 
   // keep a ref to latest messages so async handlers can access up-to-date list
@@ -86,6 +88,7 @@ const FeatureChat = () => {
     const preload = st.preloadMessages as ChatMessage[] | undefined;
     if (threadId && preload && preload.length > 0) {
       setMessages(preload);
+      setSourceExpanded({});
     }
     // no separate preload for search results; they are embedded as tool messages now
 
@@ -125,6 +128,7 @@ const FeatureChat = () => {
         }
         // If nothing in history, keep preset welcome
         setMessages((prev) => (mapped.length > 0 ? mapped : prev));
+        setSourceExpanded({});
       } catch {
         // ignore fetch errors; keep current state
       }
@@ -167,6 +171,16 @@ const FeatureChat = () => {
 
   const handleSend = async (value: string) => {
     if (isStreaming) return;
+    // Auto-collapse all source cards except the latest one when user sends a new message
+    const toolIds = messagesRef.current.filter((m) => m.role === "tool" && m.toolName === "search_web").map((m) => m.id);
+    const lastToolId = toolIds.length > 0 ? toolIds[toolIds.length - 1] : undefined;
+    setSourceExpanded((prev) => {
+      const next = { ...prev } as Record<string, boolean>;
+      for (const id of Object.keys(next)) {
+        if (id !== lastToolId) next[id] = false;
+      }
+      return next;
+    });
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: value };
     const assistantMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: "" };
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
@@ -284,6 +298,8 @@ const FeatureChat = () => {
                 next.splice(idx, 0, toolMsg);
                 return next;
               });
+              // Expand the latest source card by default
+              setSourceExpanded((prev) => ({ ...prev, [toolMsg.id]: true }));
             } catch {
               // ignore
             }
@@ -392,31 +408,41 @@ const FeatureChat = () => {
                 {messages.map((m) => {
                   if (m.role === "tool" && m.toolName === "search_web") {
                     const results = Array.isArray(m.results) ? m.results : [];
+                    const isOpen = !!sourceExpanded[m.id];
                     return (
                       <div key={m.id} className="flex justify-start">
                         <div className="max-w-[80%] w-full">
                           <div className="rounded-lg border bg-muted/30 p-3">
-                            <div className="flex items-center justify-between">
+                            <button
+                              type="button"
+                              className="flex w-full items-center justify-between hover:opacity-80"
+                              onClick={() => setSourceExpanded((prev) => ({ ...prev, [m.id]: !isOpen }))}
+                              aria-expanded={isOpen}
+                              aria-controls={`sources-${m.id}`}
+                            >
                               <div className="text-sm font-medium text-muted-foreground">
                                 {results.length} nguồn
                               </div>
-                            </div>
-                            <div className="relative mt-3">
-                              <Carousel opts={{ align: "start" }} className="w-full">
-                                <CarouselContent>
-                                  {results.map((it, idx) => (
-                                    <CarouselItem
-                                      key={idx}
-                                      className="basis-full sm:basis-1/2 lg:basis-1/3"
-                                    >
-                                      <SourceCard item={it} index={idx} />
-                                    </CarouselItem>
-                                  ))}
-                                </CarouselContent>
-                                <CarouselPrevious className="-left-5" />
-                                <CarouselNext className="-right-5" />
-                              </Carousel>
-                            </div>
+                              <ChevronDown className={`size-4 transition-transform ${isOpen ? "rotate-180" : "rotate-0"}`} />
+                            </button>
+                            {isOpen ? (
+                              <div id={`sources-${m.id}`} className="relative mt-3">
+                                <Carousel opts={{ align: "start" }} className="w-full">
+                                  <CarouselContent>
+                                    {results.map((it, idx) => (
+                                      <CarouselItem
+                                        key={idx}
+                                        className="basis-full sm:basis-1/2 lg:basis-1/3"
+                                      >
+                                        <SourceCard item={it} index={idx} />
+                                      </CarouselItem>
+                                    ))}
+                                  </CarouselContent>
+                                  <CarouselPrevious className="-left-5" />
+                                  <CarouselNext className="-right-5" />
+                                </Carousel>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       </div>
