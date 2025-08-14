@@ -1,11 +1,11 @@
+import asyncio
 from typing import Optional
 
 from aiohttp import ClientSession
+from backend.settings import settings
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from pydantic import BaseModel
-
-from backend.settings import settings
 
 
 class SearchResult(BaseModel):
@@ -71,11 +71,8 @@ async def search(
         exclude_social_media_links=True,
     )
 
-    # Use crawler to get page content for each result
-    async with AsyncWebCrawler() as crawler:
-        for idx, result in enumerate(web_results):
-            # Also set the id for the result
-            result.id = idx + 1
+    async def crawl_result(result: SearchResult) -> SearchResult:
+        async with AsyncWebCrawler() as crawler:
             crawl_result = await crawler.arun(
                 url=result.url,
                 query=query,
@@ -85,13 +82,16 @@ async def search(
                 result.content = str(crawl_result.markdown)
             else:
                 print("Crawl failed for result: ", result.url)
+        return result
 
-    return web_results
+    # Crawl the results asynchronously
+    tasks = [crawl_result(result) for result in web_results]
+    crawl_results = await asyncio.gather(*tasks)
+
+    return crawl_results
 
 
 if __name__ == "__main__":
-    import asyncio
-
     crawler = AsyncWebCrawler()
     result = asyncio.run(
         search(

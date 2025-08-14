@@ -5,12 +5,6 @@ import logging
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-from pydantic_ai.messages import ModelMessagesTypeAdapter
-from sqlmodel import select
-
 from backend.core.agents.chat.agent import chat_agent
 from backend.core.agents.chat.deps import ChatDeps
 from backend.core.mixins import ConversationMixin
@@ -18,6 +12,11 @@ from backend.core.models import FeatureKey, FeaturePreset
 from backend.core.repositories.conversation import ConversationRepository
 from backend.db import AsyncSessionLocal
 from backend.settings import settings
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from pydantic_ai.messages import ModelMessagesTypeAdapter
+from sqlmodel import select
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -200,6 +199,8 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                     for r in runs:
                         # r.messages is a Python JSON-ready object (list/dict)
                         msgs = ModelMessagesTypeAdapter.validate_python(r.messages)
+                        # TODO: how to filter system messages?
+                        # msgs = [msg for msg in msgs if msg.get("kind") == "response"]
                         message_history.extend(msgs)
                 except Exception:
                     logger.exception(

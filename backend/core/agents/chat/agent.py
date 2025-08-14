@@ -1,14 +1,14 @@
 import logfire
-from pydantic_ai import Agent, RunContext
-
 from backend.core.agents.chat.deps import ChatDeps
 from backend.core.tools.search import search
 from backend.settings import settings
+from loguru import logger
+from pydantic_ai import Agent, RunContext
 
 logfire.configure(token=settings.logfire_write_token, scrubbing=False)
 logfire.instrument_pydantic_ai()
 
-# TODO: Improve this later to reduce the token usage for citations
+# TODO: Improve the citation method to reduce the token usage.
 system_prompt = """
 ---
 Current date and time: {current_datetime}
@@ -27,7 +27,7 @@ CITATION REQUIREMENTS:
 - Use descriptive Vietnamese text for the link, not generic terms
 
 CITATION FORMAT EXAMPLE:
-"Theo báo cáo mới nhất, giá vàng đã [tăng 15%](https://vnexpress.net/gold-report). Chuyên gia kinh tế cho rằng xu hướng này sẽ tiếp tục [báo cáo của Reuters](https://reuters.com/analysis) và [phân tích từ Tuổi Trẻ](https://tuoitre.vn/economic-forecast)."
+"Theo báo cáo mới nhất, giá vàng đã [tăng 15%](https://vnexpress.net/gold-report). Chuyên gia kinh tế cho rằng xu hướng này sẽ [tiếp tục](https://reuters.com/analysis)"
 
 WHEN NOT TO CITE:
 - When answering from your existing knowledge without web search
@@ -43,14 +43,24 @@ chat_agent = Agent(
 )
 
 
-@chat_agent.system_prompt
-async def chat_agent_system_prompt(ctx: RunContext[ChatDeps]) -> str:
+@chat_agent.instructions
+async def chat_agent_instructions(ctx: RunContext[ChatDeps]) -> str:
     return system_prompt.format(current_datetime=ctx.deps.current_datetime)
 
 
-@chat_agent.tool_plain
-async def search_web(query: str, n: int = 5) -> list:
-    """Use when the users need the latest news, returns a list of search results with page content for each result."""
+@chat_agent.tool_plain(docstring_format="google", require_parameter_descriptions=True, retries=2)
+async def search_web(query: str, n: int) -> list:
+    """Search the web for recent or breaking information.
+
+    Args:
+        query: A search-ready query that emphasizes recency/newness.
+            For example, include terms like "tin tức", "mới nhất", dates,
+            or time ranges. If the user asks "Tại sao bà Kim bị bắt",
+            use "Tin tức về bà Kim bị bắt" or
+            "Vì sao bà Kim bị bắt mới nhất".
+        n: Number of results to return. Increase this for complex topics.
+    """
+    logger.debug(f'Searching web for "{query}" with {n} results')
     results = await search(query, n)
     return [w.model_dump() for w in results]
 
