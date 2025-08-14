@@ -11,7 +11,6 @@ import {
 } from "@/components/ui/carousel";
 import { useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { slugifyVi } from "@/lib/utils";
 import city from "@/assets/thumb-city.jpg";
 import laptop from "@/assets/thumb-laptop.jpg";
 import nature from "@/assets/thumb-nature.jpg";
