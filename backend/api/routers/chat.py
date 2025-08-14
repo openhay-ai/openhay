@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 from uuid import UUID
 
+import logfire
 from backend.core.agents.chat.agent import chat_agent
 from backend.core.agents.chat.deps import ChatDeps
 from backend.core.mixins import ConversationMixin
@@ -127,6 +128,7 @@ async def list_conversations() -> dict[str, list[ConversationListItem]]:
                 )
             )
 
+        logfire.info("Conversations", items=items)
         return {"items": items}
 
 
@@ -198,9 +200,7 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                     for r in runs:
                         # r.messages is a Python JSON-ready object (list/dict)
                         msgs = ModelMessagesTypeAdapter.validate_python(r.messages)
-                        # TODO: how to filter system messages?
-                        # msgs = [msg for msg in msgs if msg.get("kind") ==
-                        #         "response"]
+                        logfire.info("Message history", msgs=msgs)
                         message_history.extend(msgs)
                 except Exception:
                     logger.exception(
@@ -384,6 +384,7 @@ async def get_conversation_history(conversation_id: UUID) -> dict:
                             }
                         )
 
+        logfire.info("Messages:", messages=messages)
         return {
             "conversation_id": str(conversation_id),
             "messages": messages,

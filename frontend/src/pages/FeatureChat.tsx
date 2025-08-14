@@ -7,6 +7,14 @@ import { Markdown } from "@/components/Markdown";
 // no slug needed; route is /t/{uuid}
 import { getChatSseUrl, getChatHistoryUrl } from "@/lib/api";
 import { Loader2 } from "lucide-react";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
+import { Card, CardContent } from "@/components/ui/card";
 
 type ChatMessage = {
   id: string;
@@ -56,7 +64,10 @@ const FeatureChat = () => {
   const location = useLocation();
   const typeParam = searchParams.get("type") ?? undefined;
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessagesFor(typeParam));
+  // Holds the search_web tool results for the latest run
+  const [lastSearchResults, setLastSearchResults] = useState<any[] | null>(null);
   const messagesRef = useRef<ChatMessage[]>(messages);
+  const lastSearchResultsRef = useRef<any[] | null>(null);
   const featureParams = useMemo(() => PRESET_DEFAULT_PARAMS[typeParam ?? "default"] ?? {}, [typeParam]);
 
   // reset initial message when feature type changes
@@ -75,6 +86,11 @@ const FeatureChat = () => {
     const preload = st.preloadMessages as ChatMessage[] | undefined;
     if (threadId && preload && preload.length > 0) {
       setMessages(preload);
+    }
+    const preloadSearchResults = st.preloadSearchResults as any[] | null | undefined;
+    if (Array.isArray(preloadSearchResults)) {
+      setLastSearchResults(preloadSearchResults);
+      lastSearchResultsRef.current = preloadSearchResults;
     }
 
     // On hard refresh or direct visit to /t/{uuid}, fetch history
@@ -216,6 +232,8 @@ const FeatureChat = () => {
           }
           const dataStr = dataLines.join("\n");
 
+          console.log(eventName, dataStr);
+
           if (eventName === "conversation_created") {
             try {
               const parsed = JSON.parse(dataStr) as { conversation_id?: string };
@@ -233,6 +251,19 @@ const FeatureChat = () => {
               if (chunk) commitChunk(chunk);
             } catch {
               // ignore parse errors per chunk
+            }
+          } else if (eventName === "search_results") {
+            // Final search_web tool results
+            try {
+              const parsed = JSON.parse(dataStr) as { results?: any[] };
+              const results = Array.isArray(parsed?.results) ? parsed.results : [];
+              setLastSearchResults(results);
+              lastSearchResultsRef.current = results;
+
+              console.log("lastSearchResults", parsed?.results);
+            } catch {
+              console.log("search_results error", dataStr);
+              // ignore
             }
           } else if (eventName === "error") {
             // surface error to assistant bubble
@@ -266,7 +297,7 @@ const FeatureChat = () => {
         if (typeParam) params.set("type", typeParam);
         navigate(`/t/${createdConversationId}?${params.toString()}`, {
           replace: true,
-          state: { preloadMessages: messagesRef.current },
+          state: { preloadMessages: messagesRef.current, preloadSearchResults: lastSearchResultsRef.current },
         });
       }
     } catch (e) {
@@ -278,6 +309,40 @@ const FeatureChat = () => {
         )
       );
     }
+  };
+
+  const SourceCard = ({ item, index }: { item: any; index: number }) => {
+    const title: string = item?.title ?? item?.url ?? "Nguồn";
+    const url: string = item?.url ?? "";
+    const host: string = item?.meta_url?.hostname || item?.profile?.long_name || "";
+    const favicon: string =
+      item?.meta_url?.favicon || item?.profile?.img || "/favicon.ico";
+    return (
+      <Card className="h-full">
+        <CardContent className="p-4 flex items-start gap-3">
+          <div className="flex items-center justify-center h-6 w-6 rounded-full bg-secondary text-xs">
+            {index + 1}
+          </div>
+          <div className="flex-1 overflow-hidden">
+            <a
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              className="line-clamp-2 text-sm hover:underline"
+            >
+              {title}
+            </a>
+            <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+              {favicon ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={favicon} alt="icon" className="h-4 w-4 rounded-sm" />
+              ) : null}
+              <span className="truncate">{host}</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
   };
 
   return (
@@ -333,6 +398,35 @@ const FeatureChat = () => {
                 ))}
                 <div ref={endRef} />
               </div>
+
+              {Array.isArray(lastSearchResults) && lastSearchResults.length > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium text-muted-foreground">
+                      {lastSearchResults.length} nguồn
+                    </div>
+                  </div>
+                  <div className="relative mt-3">
+                    <Carousel
+                      opts={{ align: "start" }}
+                      className="w-full"
+                    >
+                      <CarouselContent>
+                        {lastSearchResults.map((it, idx) => (
+                          <CarouselItem
+                            key={idx}
+                            className="basis-full sm:basis-1/2 lg:basis-1/3"
+                          >
+                            <SourceCard item={it} index={idx} />
+                          </CarouselItem>
+                        ))}
+                      </CarouselContent>
+                      <CarouselPrevious className="-left-5" />
+                      <CarouselNext className="-right-5" />
+                    </Carousel>
+                  </div>
+                </div>
+              )}
 
               <PromptInput onSubmit={handleSend} fixed />
             </div>
