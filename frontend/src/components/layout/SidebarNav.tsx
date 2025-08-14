@@ -25,7 +25,7 @@ const secondaryItems: Item[] = [
 export const SidebarNav = () => {
   const location = useLocation();
   return (
-    <aside className="hidden md:flex h-screen w-64 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground sticky top-0">
+    <aside className="hidden md:flex fixed inset-y-0 left-0 w-64 flex-col border-r bg-sidebar text-sidebar-foreground z-10">
       <div className="flex items-center gap-3 px-4 py-4 border-b">
         <img src={logo} alt="AI Hay logo" className="size-8 rounded" loading="lazy" />
         <span className="font-semibold">AI Hay</span>

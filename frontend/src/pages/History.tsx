@@ -36,7 +36,7 @@ const History = () => {
   return (
     <div className="min-h-screen flex w-full overflow-hidden">
       <SidebarNav />
-      <div className="md:flex-auto overflow-hidden w-full">
+      <div className="md:flex-auto overflow-hidden w-full md:ml-64">
         <main className="h-full overflow-auto w-full px-3 md:px-6">
           <header className="flex justify-between items-center gap-3 py-4">
             <h1 className="text-2xl font-semibold">Lịch sử</h1>

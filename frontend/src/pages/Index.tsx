@@ -59,19 +59,19 @@ const Index = () => {
     <div className="min-h-screen flex w-full overflow-hidden">
       <SidebarNav />
 
-      <div className="md:flex-auto overflow-hidden w-full">
+      <div className="md:flex-auto overflow-hidden w-full md:ml-64">
         <main className="h-full overflow-auto w-full px-3 md:px-6">
           
 
-          <section className="max-w-3xl mx-auto pb-40">
-            <div className="flex flex-col items-center mt-10">
+          <section className="max-w-3xl mx-auto pb-40 min-h-[calc(100vh-10rem)] flex items-center">
+            <div className="flex flex-col items-center w-full">
               <h1 className="text-4xl md:text-5xl font-semibold tracking-tight mb-2">🎓 Xin chào</h1>
               <p className="text-center text-muted-foreground max-w-xl mb-10">
                 AI Hay giúp bạn giải đáp mọi thắc mắc trong học tập và cập nhật kiến thức nhanh chóng.
               </p>
 
               <div className="w-full">
-                <Carousel opts={{ align: "start", slidesToScroll: 1 }} className="mb-6">
+                <Carousel opts={{ align: "start", slidesToScroll: 1 }} className="mb-10">
                   <CarouselContent>
                     {filled.map((f) => (
                       <CarouselItem key={f.title} className="basis-full md:basis-1/3">

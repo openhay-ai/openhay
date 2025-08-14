@@ -10,6 +10,7 @@ export type PromptInputProps = {
   ctaLabel?: string;
   className?: string;
   fixed?: boolean;
+  disabled?: boolean;
 };
 
 export const PromptInput = ({
@@ -18,12 +19,14 @@ export const PromptInput = ({
   ctaLabel = "Gửi",
   className,
   fixed = false,
+  disabled = false,
 }: PromptInputProps) => {
   const [value, setValue] = useState("");
   const { toast } = useToast();
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
+    if (disabled) return;
     const trimmed = value.trim();
     if (!trimmed) return;
 
@@ -52,7 +55,7 @@ export const PromptInput = ({
           className="h-16 border-0 focus-visible:ring-0 text-base"
           aria-label="Ô nhập câu hỏi"
         />
-        <Button type="submit" variant="hero" size="xl" aria-label="Gửi câu hỏi">
+        <Button type="submit" variant="hero" size="xl" aria-label="Gửi câu hỏi" disabled={disabled}>
           <Send className="mr-1" /> {ctaLabel}
         </Button>
       </div>

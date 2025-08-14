@@ -66,6 +66,7 @@ const FeatureChat = () => {
   const location = useLocation();
   const typeParam = searchParams.get("type") ?? undefined;
   const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessagesFor(typeParam));
+  const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const messagesRef = useRef<ChatMessage[]>(messages);
   const featureParams = useMemo(() => PRESET_DEFAULT_PARAMS[typeParam ?? "default"] ?? {}, [typeParam]);
 
@@ -165,6 +166,7 @@ const FeatureChat = () => {
   const abortRef = useRef<AbortController | null>(null);
 
   const handleSend = async (value: string) => {
+    if (isStreaming) return;
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: value };
     const assistantMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: "" };
     setMessages((prev) => [...prev, userMsg, assistantMsg]);
@@ -175,6 +177,7 @@ const FeatureChat = () => {
     }
     const ac = new AbortController();
     abortRef.current = ac;
+    setIsStreaming(true);
 
     try {
       const extractUuidFromThreadId = (raw?: string): string | undefined => {
@@ -327,6 +330,9 @@ const FeatureChat = () => {
             : m
         )
       );
+    } finally {
+      setIsStreaming(false);
+      abortRef.current = null;
     }
   };
 
@@ -368,7 +374,7 @@ const FeatureChat = () => {
     <div className="min-h-screen flex w-full overflow-hidden">
       <SidebarNav />
 
-      <div className="md:flex-auto overflow-hidden w-full">
+      <div className="md:flex-auto overflow-hidden w-full md:ml-64">
         <main className="h-full overflow-auto w-full px-3 md:px-6">
           <header className="flex justify-between items-center gap-3 py-4">
             <div>
@@ -449,7 +455,7 @@ const FeatureChat = () => {
                 <div ref={endRef} />
               </div>
 
-              <PromptInput onSubmit={handleSend} fixed />
+              <PromptInput onSubmit={handleSend} fixed disabled={isStreaming} />
             </div>
           </section>
         </main>
