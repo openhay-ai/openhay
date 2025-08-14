@@ -1,27 +1,71 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { normalizeLinksToSiteAnchors, normalizeUrlForMatch, stripHtml } from "@/lib/utils";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+
+export type CitationMeta = {
+  url: string;
+  title?: string;
+  description?: string;
+  hostname?: string;
+  favicon?: string;
+};
 
 export type MarkdownProps = {
   content: string;
   className?: string;
+  linkMeta?: Record<string, CitationMeta>;
 };
 
 // Lightweight markdown renderer with sensible defaults for chat bubbles
-export const Markdown: React.FC<MarkdownProps> = ({ content, className }) => {
+export const Markdown: React.FC<MarkdownProps> = ({ content, className, linkMeta }) => {
+  const normalized = normalizeLinksToSiteAnchors(content);
   return (
     <div className={className}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          a({ node, ...props }) {
-            return (
+          a({ node, href, children, ...props }) {
+            const hrefStr = typeof href === "string" ? href : undefined;
+            const key = hrefStr ? normalizeUrlForMatch(hrefStr) : undefined;
+            const meta = key && linkMeta ? linkMeta[key] : undefined;
+            const Anchor = (
               <a
+                href={hrefStr}
                 {...props}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="underline underline-offset-2 text-primary hover:opacity-80"
-              />
+                className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground no-underline hover:opacity-80"
+              >
+                {children}
+              </a>
+            );
+            if (!meta) return Anchor;
+            const site = meta.hostname?.replace(/^www\./, "") || meta.hostname || undefined;
+            return (
+              <HoverCard>
+                <HoverCardTrigger asChild>
+                  {Anchor}
+                </HoverCardTrigger>
+                <HoverCardContent className="w-80">
+                  <div className="flex items-start gap-3">
+                    {meta.favicon ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={meta.favicon} alt="icon" className="mt-0.5 h-5 w-5 rounded-sm" />
+                    ) : null}
+                    <div className="min-w-0">
+                      <div className="text-xs text-muted-foreground truncate">{site || meta.url}</div>
+                      {meta.title ? (
+                        <div className="font-medium truncate" title={meta.title}>{meta.title}</div>
+                      ) : null}
+                      {meta.description ? (
+                        <div className="mt-1 line-clamp-3 text-xs text-muted-foreground">{stripHtml(meta.description)}</div>
+                      ) : null}
+                    </div>
+                  </div>
+                </HoverCardContent>
+              </HoverCard>
             );
           },
           code({ className, children, ...props }) {
@@ -117,7 +161,7 @@ export const Markdown: React.FC<MarkdownProps> = ({ content, className }) => {
           },
         }}
       >
-        {content}
+        {normalized}
       </ReactMarkdown>
     </div>
   );

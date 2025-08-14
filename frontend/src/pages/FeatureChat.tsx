@@ -4,6 +4,7 @@ import PromptInput from "@/components/PromptInput";
 import { useParams, useSearchParams, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { Markdown } from "@/components/Markdown";
+import { normalizeUrlForMatch } from "@/lib/utils";
 // no slug needed; route is /t/{uuid}
 import { getChatSseUrl, getChatHistoryUrl } from "@/lib/api";
 import { Loader2, ChevronDown } from "lucide-react";
@@ -70,6 +71,29 @@ const FeatureChat = () => {
   const messagesRef = useRef<ChatMessage[]>(messages);
   const featureParams = useMemo(() => PRESET_DEFAULT_PARAMS[typeParam ?? "default"] ?? {}, [typeParam]);
   const [sourceExpanded, setSourceExpanded] = useState<Record<string, boolean>>({});
+
+  // Build URL -> metadata map from any search_web tool results present in the message list
+  const linkMeta = useMemo(() => {
+    const map: Record<string, { url: string; title?: string; description?: string; hostname?: string; favicon?: string }> = {};
+    for (const m of messages) {
+      if (m.role === "tool" && m.toolName === "search_web" && Array.isArray(m.results)) {
+        for (const it of m.results) {
+          const url: string | undefined = it?.url;
+          if (!url) continue;
+          const key = normalizeUrlForMatch(url);
+          if (map[key]) continue;
+          const hostname: string | undefined = it?.meta_url?.hostname || it?.profile?.long_name;
+          const favicon: string | undefined = it?.meta_url?.favicon || it?.profile?.img;
+          const title: string | undefined = it?.title;
+          const description: string | undefined = it?.description;
+          map[key] = { url, title, description, hostname, favicon };
+        }
+      }
+    }
+    return map;
+  }, [messages]);
+
+  console.log(linkMeta);
 
   // reset initial message when feature type changes
   useEffect(() => {
@@ -469,7 +493,7 @@ const FeatureChat = () => {
                               <span>Để xem...</span>
                             </div>
                           ) : (
-                            <Markdown content={m.content} />
+                            <Markdown content={m.content} linkMeta={linkMeta} />
                           )
                         ) : (
                           m.content
