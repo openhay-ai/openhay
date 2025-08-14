@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from datetime import datetime
 from uuid import UUID
 
@@ -10,10 +9,12 @@ from backend.core.agents.chat.deps import ChatDeps
 from backend.core.mixins import ConversationMixin
 from backend.core.models import FeatureKey, FeaturePreset
 from backend.core.repositories.conversation import ConversationRepository
+from backend.core.utils import extract_tool_return_part
 from backend.db import AsyncSessionLocal
 from backend.settings import settings
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from loguru import logger
 from pydantic import BaseModel
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 from sqlmodel import select
@@ -148,8 +149,6 @@ async def list_conversations() -> dict[str, list[ConversationListItem]]:
     },
 )
 async def chat(payload: ChatRequest) -> StreamingResponse:
-    logger = logging.getLogger(__name__)
-
     async def stream_generator():
         try:
             async with AsyncSessionLocal() as session:
@@ -200,7 +199,8 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                         # r.messages is a Python JSON-ready object (list/dict)
                         msgs = ModelMessagesTypeAdapter.validate_python(r.messages)
                         # TODO: how to filter system messages?
-                        # msgs = [msg for msg in msgs if msg.get("kind") == "response"]
+                        # msgs = [msg for msg in msgs if msg.get("kind") ==
+                        #         "response"]
                         message_history.extend(msgs)
                 except Exception:
                     logger.exception(
@@ -219,16 +219,43 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                         }
                         json_payload = json.dumps(response, ensure_ascii=False)
                         sse_message = f"event: ai_message\ndata: {json_payload}\n\n"
-                        logger.debug(
-                            "SSE message: %s",
-                            sse_message,
-                        )
+                        logger.debug(f"SSE message: {sse_message}")
                         yield sse_message
 
                     # Persist the structured run for perfect reconstruction
                     try:
                         # Prefer Python-objects for JSONB column
                         msgs_py = ModelMessagesTypeAdapter.validate_python(result.new_messages())
+                        # Emit only search_web tool results for frontend UI
+                        search_results: list[dict] = []
+                        seen_urls: set[str] = set()
+
+                        tool_return_part = extract_tool_return_part(
+                            msgs_py,
+                            "search_web",
+                        )
+                        if tool_return_part:
+                            content = (
+                                tool_return_part.get("content")
+                                if isinstance(tool_return_part, dict)
+                                else getattr(tool_return_part, "content", None)
+                            )
+                            if isinstance(content, list):
+                                for item in content:
+                                    if isinstance(item, dict):
+                                        url = item.get("url")
+                                        if isinstance(url, str) and url in seen_urls:
+                                            continue
+                                        if isinstance(url, str):
+                                            seen_urls.add(url)
+                                            search_results.append(item)
+
+                        if search_results:
+                            evt_payload = {"results": search_results}
+                            evt_payload_json = json.dumps(evt_payload, ensure_ascii=False)
+                            logger.debug(f"SSE search_results message: {evt_payload_json}")
+                            yield (f"event: search_results\ndata: {evt_payload_json}\n\n")
+
                         # Convert to jsonable python to avoid non-serializables
                         from pydantic_core import to_jsonable_python
 

@@ -15,6 +15,7 @@ dependencies = [
     "aiohttp>=3.12.15",
     "pre-commit>=4.3.0",
     "loguru>=0.7.3",
+    "logfire[fastapi]>=4.3.1",
 ]
 
 [tool.ruff]
