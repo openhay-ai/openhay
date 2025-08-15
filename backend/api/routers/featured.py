@@ -10,7 +10,7 @@ from backend.core.repositories import (
     ArticleSourceRepository,
     DailySuggestionRepository,
 )
-from backend.core.tools.search import search
+from backend.core.services.web_discovery import WebDiscovery
 from backend.db import AsyncSessionLocal
 from backend.settings import settings
 from fastapi import APIRouter, BackgroundTasks
@@ -63,19 +63,22 @@ async def get_today_featured(
         # Decide which day to use for response and
         # whether to kick off background generation
         if existing_today:
-            logger.info(f"Found {len(existing_today)} existing featured items for {today}")
+            cnt = len(existing_today)
+            msg = f"Found {cnt} existing featured items for {today}"
+            logger.info(msg)
             use_day = today
             use_suggestions = existing_today
         else:
-            # After 6am local time, start generating
-            # today's featured in the background
+            # After 6am local time, start generating today's featured
             cutoff = now.replace(hour=6, minute=0, second=0, microsecond=0)
             if now >= cutoff:
                 background_tasks.add_task(generate_today_featured, today)
 
             # Always return yesterday's featured if today's is not ready
             yesterday_featured = await sug_repo.list_for_day(yesterday)
-            logger.info(f"Returning {len(yesterday_featured)} featured items for {yesterday}")
+            cnt = len(yesterday_featured)
+            msg = f"Returning {cnt} featured items for {yesterday}"
+            logger.info(msg)
             use_day = yesterday
             use_suggestions = yesterday_featured
 
@@ -111,7 +114,7 @@ async def generate_today_featured(target_day: date) -> list[FeaturedItem]:
         "site:vnexpress.net OR site:tuoitre.vn OR site:thanhnien.vn "
         "OR site:plo.vn OR site:laodong.vn"
     )
-    results = await search(q, count=20)
+    results = await WebDiscovery().discover(q, count=20)
 
     docs: list[dict] = []
     for r in results:
