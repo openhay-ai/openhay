@@ -44,25 +44,25 @@ export const Markdown: React.FC<MarkdownProps> = ({ content, className, linkMeta
             if (!meta) return Anchor;
             const site = meta.hostname?.replace(/^www\./, "") || meta.hostname || undefined;
             return (
-              <HoverCard>
+              <HoverCard openDelay={100} closeDelay={100}>
                 <HoverCardTrigger asChild>
                   {Anchor}
                 </HoverCardTrigger>
                 <HoverCardContent className="w-80">
-                  <div className="flex items-start gap-3">
-                    {meta.favicon ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={meta.favicon} alt="icon" className="mt-0.5 h-5 w-5 rounded-sm" />
-                    ) : null}
-                    <div className="min-w-0">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {meta.favicon ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={meta.favicon} alt="icon" className="h-5 w-5 rounded-sm" />
+                      ) : null}
                       <div className="text-xs text-muted-foreground truncate">{site || meta.url}</div>
-                      {meta.title ? (
-                        <div className="font-medium truncate" title={meta.title}>{meta.title}</div>
-                      ) : null}
-                      {meta.description ? (
-                        <div className="mt-1 line-clamp-3 text-xs text-muted-foreground">{stripHtml(meta.description)}</div>
-                      ) : null}
                     </div>
+                    {meta.title ? (
+                      <div className="font-medium truncate" title={meta.title}>{meta.title}</div>
+                    ) : null}
+                    {meta.description ? (
+                      <div className="line-clamp-3 text-xs text-muted-foreground">{stripHtml(meta.description)}</div>
+                    ) : null}
                   </div>
                 </HoverCardContent>
               </HoverCard>
