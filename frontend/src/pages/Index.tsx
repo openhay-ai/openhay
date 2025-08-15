@@ -1,5 +1,4 @@
 import SidebarNav from "@/components/layout/SidebarNav";
-import PromoBanner from "@/components/layout/PromoBanner";
 import PromptInput from "@/components/PromptInput";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,19 +8,20 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "@/components/ui/carousel";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import city from "@/assets/thumb-city.jpg";
 import laptop from "@/assets/thumb-laptop.jpg";
 import nature from "@/assets/thumb-nature.jpg";
 
-type FeaturedItem = { title: string; img: string };
-const featured: FeaturedItem[] = [
+type FeaturedItem = { title: string; img?: string; url?: string };
+const fallbackFeatured: FeaturedItem[] = [
   { title: "Tàu Trung Quốc tự đâm vào nhau", img: city },
   { title: "Tổng Bí thư Tô Lâm thăm Hàn Quốc", img: laptop },
   { title: "Tài khoản giao thông là gì", img: nature },
   { title: "Rừng Amazon đang bị cháy", img: nature },
 ];
+import { getFeaturedUrl } from "@/lib/api";
 
 const chips = [
   "Vượt đèn vàng có bị phạt không",
@@ -34,6 +34,7 @@ const chips = [
 ];
 
 const Index = () => {
+  const [featured, setFeatured] = useState<FeaturedItem[]>(fallbackFeatured);
   const filled: FeaturedItem[] = useMemo(() => {
     if (featured.length === 0) return [];
     if (featured.length >= 3) return featured;
@@ -42,9 +43,28 @@ const Index = () => {
       result.push(result[result.length - 1]);
     }
     return result;
-  }, []);
+  }, [featured]);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const run = async () => {
+      try {
+        const res = await fetch(getFeaturedUrl());
+        if (!res.ok) throw new Error("Failed to fetch featured");
+        const data = await res.json();
+        const items: { title: string; url?: string; image_url?: string }[] = data.items || [];
+        if (items.length > 0) {
+          const mapped = items.map((i) => ({ title: i.title, url: i.url, img: i.image_url }));
+          setFeatured(mapped);
+        } 
+      } catch (e) {
+        // ignore and keep fallback
+        setFeatured(fallbackFeatured);
+      }
+    };
+    run();
+  }, []);
 
   const handleSubmit = (value: string) => {
     const currentType = searchParams.get("type") ?? undefined;
@@ -75,7 +95,7 @@ const Index = () => {
                     {filled.map((f) => (
                       <CarouselItem key={f.title} className="basis-full md:basis-1/3">
                         <article className="flex items-center rounded-lg border overflow-hidden bg-card hover:shadow-md transition-shadow">
-                          <img src={f.img} width={60} height={60} alt={f.title} className="object-cover size-[60px]" loading="lazy" />
+                          <img src={f.img ?? city} width={60} height={60} alt={f.title} className="object-cover size-[60px]" loading="lazy" />
                           <div className="px-3 py-2 text-sm">{f.title}</div>
                         </article>
                       </CarouselItem>

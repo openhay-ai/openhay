@@ -17,4 +17,8 @@ export function getConversationsUrl(): string {
   return `${getApiBaseUrl()}/api/chat`;
 }
 
+export function getFeaturedUrl(): string {
+  return `${getApiBaseUrl()}/api/featured`;
+}
+
 
