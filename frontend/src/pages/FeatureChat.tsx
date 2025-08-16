@@ -16,11 +16,19 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 import { Card, CardContent } from "@/components/ui/card";
+import AttachmentList from "@/components/AttachmentList";
+
+type ChatMedia = {
+  src: string;
+  mediaType: string;
+  identifier?: string;
+};
 
 type ChatMessage = {
   id: string;
   role: "user" | "assistant" | "system" | "tool";
   content: string;
+  media?: ChatMedia[];
   toolName?: string;
   results?: any[];
 };
@@ -72,7 +80,17 @@ const FeatureChat = () => {
   const featureParams = useMemo(() => PRESET_DEFAULT_PARAMS[typeParam ?? "default"] ?? {}, [typeParam]);
   const [sourceExpanded, setSourceExpanded] = useState<Record<string, boolean>>({});
 
-  // Build URL -> metadata map from any search_web tool results present in the message list
+  const normalizeBase64 = (input: string): string => {
+    let out = input.replace(/-/g, "+").replace(/_/g, "/");
+    const mod = out.length % 4;
+    if (mod === 2) out += "==";
+    else if (mod === 3) out += "=";
+    else if (mod === 1) out += "==="; // extremely rare, but keep safe
+    return out;
+  };
+
+  // Build URL -> metadata map from any 
+  // search_web tool results present in the message list
   const linkMeta = useMemo(() => {
     const map: Record<string, { url: string; title?: string; description?: string; hostname?: string; favicon?: string }> = {};
     for (const m of messages) {
@@ -93,7 +111,6 @@ const FeatureChat = () => {
     return map;
   }, [messages]);
 
-  console.log(linkMeta);
 
   // reset initial message when feature type changes
   useEffect(() => {
@@ -160,8 +177,34 @@ const FeatureChat = () => {
           // Regular mapping for non-tool or other tool parts
           const id = `${data.conversation_id}-${idx}`;
           if (partKind === "user-prompt") {
-            const content = typeof part?.content === "string" ? part.content : "";
-            mapped.push({ id, role: "user", content });
+            let content = "";
+            const media: ChatMedia[] = [];
+            const raw = part?.content as unknown;
+            if (typeof raw === "string") {
+              content = raw;
+            } else if (Array.isArray(raw)) {
+              for (const item of raw) {
+                if (typeof item === "string") {
+                  content = content ? `${content} ${item}` : item;
+                  continue;
+                }
+                if (item && typeof item === "object") {
+                  const kind: string | undefined = (item as any)?.kind ?? (item as any)?.part_kind;
+                  const data: unknown = (item as any)?.data;
+                  const mediaType: unknown = (item as any)?.media_type ?? (item as any)?.mime_type;
+                  const identifier: string | undefined = (item as any)?.identifier ?? (item as any)?.name;
+                  if (
+                    (kind === "binary" || typeof (item as any)?.data === "string") &&
+                    typeof data === "string" &&
+                    typeof mediaType === "string"
+                  ) {
+                    const src = `data:${mediaType};base64,${normalizeBase64(data)}`;
+                    media.push({ src, mediaType, identifier });
+                  }
+                }
+              }
+            }
+            mapped.push({ id, role: "user", content, media: media.length ? media : undefined });
           } else if (partKind === "text") {
             const content = typeof part?.content === "string" ? part.content : "";
             mapped.push({ id, role: "assistant", content });
@@ -213,7 +256,7 @@ const FeatureChat = () => {
 
   const abortRef = useRef<AbortController | null>(null);
 
-  const handleSend = async (value: string) => {
+  const handleSend = async (value: string, files?: File[]) => {
     if (isStreaming) return;
     // Auto-collapse all source cards except the latest one when user sends a new message
     const toolIds = messagesRef.current.filter((m) => m.role === "tool" && m.toolName === "search_web").map((m) => m.id);
@@ -225,9 +268,8 @@ const FeatureChat = () => {
       }
       return next;
     });
-    const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: value };
-    const assistantMsg: ChatMessage = { id: crypto.randomUUID(), role: "assistant", content: "" };
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    let userMsg: ChatMessage;
+    let assistantMsg: ChatMessage;
 
     // cancel previous stream if any
     if (abortRef.current) {
@@ -248,6 +290,46 @@ const FeatureChat = () => {
       const payload: Record<string, unknown> = { message: value };
       const canonicalId = extractUuidFromThreadId(threadId);
       if (canonicalId) payload.conversation_id = canonicalId;
+
+      // If files were provided, read and attach as base64 for backend to convert into BinaryContent
+      if (files && files.length > 0) {
+        const readAsDataUrl = (file: File) =>
+          new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(reader.error);
+            reader.onload = () => resolve(String(reader.result || ""));
+            reader.readAsDataURL(file);
+          });
+
+        const dataUrls = await Promise.all(files.map(readAsDataUrl));
+        const media = files.map((f, idx) => {
+          const dataUrl = dataUrls[idx] || "";
+          const commaIdx = dataUrl.indexOf(",");
+          const base64Data = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl;
+          return {
+            data: base64Data,
+            media_type: f.type || "application/octet-stream",
+            identifier: f.name,
+          };
+        });
+        (payload as any).media = media;
+
+        // Prepare local preview media as data URLs for the user bubble
+        const previewMedia = dataUrls
+          .map((url, idx) => ({
+            src: url,
+            mediaType: files[idx]?.type || "application/octet-stream",
+            identifier: files[idx]?.name,
+          }))
+          .filter((m) => m.mediaType.startsWith("image/"));
+
+        userMsg = { id: crypto.randomUUID(), role: "user", content: value, media: previewMedia };
+      } else {
+        userMsg = { id: crypto.randomUUID(), role: "user", content: value };
+      }
+
+      assistantMsg = { id: crypto.randomUUID(), role: "assistant", content: "" };
+      setMessages((prev) => [...prev, userMsg!, assistantMsg!]);
 
       const res = await fetch(getChatSseUrl(), {
         method: "POST",
@@ -516,7 +598,12 @@ const FeatureChat = () => {
                             <Markdown content={m.content} linkMeta={linkMeta} />
                           )
                         ) : (
-                          m.content
+                          <>
+                            {Array.isArray(m.media) && m.media.length > 0 ? (
+                              <AttachmentList media={m.media} variant={m.role === "user" ? "onAccent" : "default"} />
+                            ) : null}
+                            <div>{m.content}</div>
+                          </>
                         )}
                       </div>
                     </div>

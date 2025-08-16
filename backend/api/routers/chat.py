@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from datetime import datetime
 from typing import Optional
@@ -26,9 +27,38 @@ from sqlmodel import select
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
+class BinaryContentIn(BaseModel):
+    """Incoming media item with base64-encoded data from the frontend.
+
+    We explicitly accept base64 here and decode to raw bytes before
+    constructing pydantic-ai's BinaryContent.
+    """
+
+    data: str
+    media_type: str
+    identifier: str | None = None
+
+
+def _b64_to_bytes(data: str) -> bytes:
+    """Decode either standard base64 or base64url ("-_/" variant).
+
+    Adds required padding if missing.
+    """
+    try:
+        # Fast path: try regular b64
+        return base64.b64decode(data)
+    except Exception:
+        # Normalize URL-safe alphabet and pad
+        normalized = data.replace("-", "+").replace("_", "/")
+        pad = (-len(normalized)) % 4
+        if pad:
+            normalized += "=" * pad
+        return base64.b64decode(normalized)
+
+
 class ChatRequest(ConversationMixin):
     message: str
-    media: Optional[list[BinaryContent]] = Field(default_factory=list)
+    media: Optional[list[BinaryContentIn]] = Field(default_factory=list)
 
 
 class ConversationListItem(BaseModel):
@@ -115,7 +145,10 @@ async def list_conversations() -> dict[str, list[ConversationListItem]]:
             except Exception:
                 preview = None
 
-            fk = keys_by_preset_id.get(str(conv.feature_preset_id), FeatureKey.ai_tim_kiem)
+            fk = keys_by_preset_id.get(
+                str(conv.feature_preset_id),
+                FeatureKey.ai_tim_kiem,
+            )
             items.append(
                 ConversationListItem(
                     id=str(conv.id),
@@ -187,8 +220,12 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
 
                 if created_new_conversation:
                     evt_payload = {"conversation_id": str(conversation.id)}
-                    json_payload = json.dumps(evt_payload, ensure_ascii=False)
-                    yield (f"event: conversation_created\ndata: {json_payload}\n\n")
+                    json_payload = json.dumps(
+                        evt_payload,
+                        ensure_ascii=False,
+                    )
+                    sse = f"event: conversation_created\ndata: {json_payload}\n\n"
+                    yield sse
 
                 # Build message history from stored runs
                 message_history = []
@@ -206,8 +243,28 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                 # Build user content
                 message = payload.message
 
+                # Decode base64 media to bytes and build BinaryContent
+                safe_media: list[BinaryContent] = []
+                for item in payload.media or []:
+                    try:
+                        raw_bytes = _b64_to_bytes(item.data)
+                    except Exception:
+                        # If decode fails, skip this item instead of failing
+                        logger.exception("Failed to decode base64 media item; skipping")
+                        continue
+
+                    safe_media.append(
+                        BinaryContent(
+                            data=raw_bytes,
+                            media_type=item.media_type,
+                            identifier=item.identifier,
+                        )
+                    )
+
+                user_prompt = [message, *safe_media]
+
                 async with chat_agent.run_stream(
-                    message,
+                    user_prompt,
                     deps=ChatDeps(),
                     message_history=message_history,
                 ) as result:
@@ -216,7 +273,10 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                             "chunk": {"content": text_piece},
                             "model": settings.model_name,
                         }
-                        json_payload = json.dumps(response, ensure_ascii=False)
+                        json_payload = json.dumps(
+                            response,
+                            ensure_ascii=False,
+                        )
                         sse_message = f"event: ai_message\ndata: {json_payload}\n\n"
                         logger.debug(f"SSE message: {sse_message[:100]}...")
                         yield sse_message
@@ -238,7 +298,11 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                                 content = (
                                     tool_return_part.get("content")
                                     if isinstance(tool_return_part, dict)
-                                    else getattr(tool_return_part, "content", None)
+                                    else getattr(
+                                        tool_return_part,
+                                        "content",
+                                        None,
+                                    )
                                 )
                                 if isinstance(content, list):
                                     for item in content:
@@ -252,14 +316,22 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
 
                         if search_results:
                             evt_payload = {"results": search_results}
-                            evt_payload_json = json.dumps(evt_payload, ensure_ascii=False)
-                            logger.debug(f"SSE search_results message: {evt_payload_json[:100]}...")
+                            evt_payload_json = json.dumps(
+                                evt_payload,
+                                ensure_ascii=False,
+                            )
+                            logger.debug(
+                                (f"SSE search_results message: {evt_payload_json[:100]}...")
+                            )
                             yield (f"event: search_results\ndata: {evt_payload_json}\n\n")
 
                         # Convert to jsonable python to avoid non-serializables
                         from pydantic_core import to_jsonable_python
 
-                        msgs_py = to_jsonable_python(msgs_py)
+                        msgs_py = to_jsonable_python(
+                            msgs_py,
+                            bytes_mode="base64",
+                        )
                         await conversation_repo.add_message_run(
                             conversation,
                             msgs_py,
@@ -305,20 +377,29 @@ async def get_conversation_history(conversation_id: UUID) -> dict:
 
         runs = await conversation_repo.list_message_runs(conversation_id)
 
-        all_messages = []
+        # Build a JSON-safe list of parts with bytes encoded as base64
+        from pydantic_core import to_jsonable_python
+
+        json_safe_parts: list[dict] = []
         for run in runs:
             try:
-                # Flatten the messages into a list of parts
                 messages = ModelMessagesTypeAdapter.validate_python(run.messages)
-                messages = [part for message in messages for part in message.parts]
-                all_messages.extend(messages)
+                # Flatten parts across messages
+                parts = [part for message in messages for part in message.parts]
+                parts_json = to_jsonable_python(parts, bytes_mode="base64")
+                # Ensure each part is a dict for response model typing
+                for p in parts_json:
+                    if isinstance(p, dict):
+                        json_safe_parts.append(p)
             except Exception:
-                raise
+                # If any run is malformed, skip that run
+                logger.exception("Failed to serialize history run; skipping")
+                continue
 
-        logfire.info("Messages", messages=all_messages)
+        logfire.info("Messages", messages=json_safe_parts)
         return ConversationHistoryResponse(
             conversation_id=conversation_id,
-            messages=all_messages,
+            messages=json_safe_parts,
         )
 
 
