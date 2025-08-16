@@ -1,0 +1,123 @@
+from backend.core.agents.research.deps import ResearchDeps
+from backend.core.agents.research.prompts import (
+    lead_agent_system_prompt,
+    subagent_system_prompt,
+)
+from backend.core.services.web_discovery import WebDiscovery
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.toolsets import CombinedToolset, FunctionToolset
+
+
+async def web_search(query: str, max_results: int = 10) -> dict:
+    """Search the web for information related to a query.
+
+    This tool performs a web search and returns snippets/summaries of search
+    results along with their URLs. It's designed to provide an overview of
+    available sources and should be used as the first step in a research
+    process to identify promising sources for further investigation.
+
+    Args:
+        query (str): The search query. Should be concise (under 5 words)
+            and moderately broad rather than hyper-specific for best
+            results.
+        max_results (int, optional): Maximum number of search results to
+            return. Defaults to 10.
+
+    Note:
+        - Use broad queries initially, then narrow if results are too general
+        - Avoid repeating identical queries as this wastes resources
+        - Results contain only snippets - use web_fetch for complete content
+        - Can be called in parallel with other tools for efficiency
+    """
+    svc = WebDiscovery()
+    search_results = await svc.fetch_search_results(query=query, count=max_results)
+    return [sr.model_dump() for sr in search_results]
+
+
+async def web_fetch(urls: list[str], timeout: int = 30) -> dict:
+    """Retrieve the complete content of a webpage.
+
+    This tool fetches the full content of webpages and should be used to get
+    detailed information after identifying promising sources through
+    web_search. It's essential for thorough research as search snippets
+    often lack sufficient detail.
+
+    Args:
+        urls (list[str]): The complete URLs of the webpages to fetch. Must be
+            valid HTTP/HTTPS URLs.
+        timeout (int, optional): Request timeout in seconds. Defaults to 30.
+
+    Note:
+        - Always use this after web_search to get complete information
+        - Required when user provides a URL directly
+        - Essential for getting detailed info beyond search snippets
+        - Use for high-quality sources identified through web_search
+    """
+    svc = WebDiscovery()
+    crawled = await svc.crawl(urls=urls, timeout=timeout)
+    return crawled
+
+
+async def complete_task(report: str) -> None:
+    """Complete the research task and submit final report to lead researcher.
+
+    Args:
+        report (str): The final research report with findings and analysis
+    """
+    pass
+
+
+base_toolset = FunctionToolset(tools=[web_search, web_fetch, complete_task])
+
+
+subagent = Agent(
+    "google-gla:gemini-2.5-flash",
+    toolset=base_toolset,
+    output_type=str,
+)
+
+
+@subagent.instructions
+async def subagent_instructions(ctx: RunContext[ResearchDeps]) -> str:
+    return subagent_system_prompt.format(
+        current_datetime=ctx.deps.current_datetime,
+    )
+
+
+# Lead Research Agent
+lead_research_toolset = FunctionToolset(max_retries=3)
+
+
+@lead_research_toolset.tool(
+    docstring_format="google",
+    require_parameter_descriptions=True,
+    retries=3,
+)
+async def run_blocking_subagent(ctx: RunContext[ResearchDeps], prompt: str) -> str:
+    """Create and run a research subagent with specific instructions.
+
+    Args:
+        prompt (str): Detailed task instructions for the subagent
+
+    Returns:
+        str: The subagent's complete research report
+    """
+    r = await subagent.run(prompt, deps=ctx.deps, usage=ctx.usage)
+    return r.output
+
+
+lead_research_agent = Agent(
+    "google-gla:gemini-2.5-pro",
+    toolset=CombinedToolset(
+        base_toolset,
+        lead_research_toolset,
+    ),
+    output_type=str,
+)
+
+
+@lead_research_agent.instructions
+async def lead_research_agent_instructions(ctx: RunContext) -> str:
+    return lead_agent_system_prompt.format(
+        current_datetime=ctx.deps.current_datetime,
+    )
