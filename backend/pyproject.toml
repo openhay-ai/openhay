@@ -1,7 +1,7 @@
 [project]
 name = "open-ai-hay"
 version = "0.1.0"
-description = "Open AI Hay - Hỏi đáp AI nguồn mở cho cộng đồng"
+description = "Open Hay - Thật sự hay cho học sinh"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

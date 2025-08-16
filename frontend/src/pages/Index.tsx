@@ -88,7 +88,7 @@ const Index = () => {
             <div className="flex flex-col items-center w-full">
               <h1 className="text-4xl md:text-5xl font-semibold tracking-tight mb-2">🎓 Xin chào</h1>
               <p className="text-center text-muted-foreground max-w-xl mb-10">
-                AI Hay giúp bạn giải đáp mọi thắc mắc trong học tập và cập nhật kiến thức nhanh chóng.
+                OpenHay giúp bạn giải đáp mọi thắc mắc trong học tập và cập nhật kiến thức nhanh chóng.
               </p>
 
               <div className="w-full">

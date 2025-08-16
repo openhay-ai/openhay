@@ -7,7 +7,7 @@ export const PromoBanner = () => {
         target="_blank"
         rel="noreferrer"
       >
-        Tặng ngay gói AI Hay Pro cho sinh viên 👉 <b>Tìm hiểu ngay</b>
+        Miễn phí mãi mãi
       </a>
     </div>
   );
