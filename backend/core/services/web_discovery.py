@@ -124,12 +124,14 @@ class WebDiscovery:
             # Update after any required wait to mark the time of this call
             self._last_brave_call_ts = monotonic()
 
-    async def crawl(self, results: Iterable[SearchResult], query: str) -> list[SearchResult]:
-        """Crawl each result URL and attach markdown and image.
+    async def crawl(self, urls: Iterable[str], timeout: int = 30) -> list[dict]:
+        """Crawl each URL and return extracted markdown + first image.
 
         Args:
-            results: Items to enrich in place.
-            query: Optional query context for the crawler.
+            urls: List/iterable of URLs to crawl.
+            timeout: Per-request timeout (seconds). Not used directly.
+        Returns:
+            A list of dicts with shape: {"url", "content", "image_url"}
         """
         md_generator = DefaultMarkdownGenerator(
             options={
@@ -190,22 +192,22 @@ class WebDiscovery:
 
         async with AsyncWebCrawler() as crawler:
 
-            async def _crawl_one(item: SearchResult) -> SearchResult:
+            async def _crawl_one(url: str) -> dict:
                 async with self._semaphore:
                     crawl_result = await crawler.arun(
-                        url=item.url,
-                        query=query,
+                        url=url,
                         config=config,
                     )
+                    content: Optional[str] = None
+                    image_url: Optional[str] = None
                     if crawl_result.success:
-                        item.content = str(crawl_result.markdown)
-                        img = _extract_first_image_url(item.content, item.url)
-                        item.image_url = img or item.image_url
+                        content = str(crawl_result.markdown)
+                        image_url = _extract_first_image_url(content, url)
                     else:
-                        logfire.info("Crawl failed", url=item.url)
-                return item
+                        logfire.info("Crawl failed", url=url)
+                return {"url": url, "content": content, "image_url": image_url}
 
-            return await asyncio.gather(*[_crawl_one(r) for r in results])
+            return await asyncio.gather(*[_crawl_one(u) for u in urls])
 
     @logfire.instrument("web_discovery.discover")
     async def discover(self, query: str, count: int = 5) -> list[SearchResult]:
@@ -215,11 +217,20 @@ class WebDiscovery:
             query: Search query string.
             count: Max number of results to return.
         """
-        base = await self.fetch_search_results(query=query, count=count)
-        if not base:
+        raw_results = await self.fetch_search_results(query=query, count=count)
+        if not raw_results:
             return []
-        enriched = await self.crawl(base, query=query)
-        return enriched
+        # Build SearchResult models
+        results = [SearchResult.model_validate(r) for r in raw_results]
+        # Crawl URLs and merge content into results by URL
+        url_list = [r.url for r in results]
+        crawled = await self.crawl(url_list)
+        data_by_url = {item.get("url"): item for item in crawled}
+        for r in results:
+            data = data_by_url.get(r.url) or {}
+            r.content = data.get("content")
+            r.image_url = data.get("image_url") or r.image_url
+        return results
 
 
 __all__ = ["SearchResult", "WebDiscovery"]
