@@ -73,13 +73,13 @@ async def chat_agent_instructions(ctx: RunContext[ChatDeps]) -> str:
     retries=2,
 )
 async def search_web(query: str, n: int) -> list:
-    """Search the web for recent or breaking information.
+    """Search the web for recent or breaking information
 
     Args:
-        query: A search-ready query that emphasizes recency/newness.
-            For example, include terms like "tin tức", "mới nhất", dates,
-            or time ranges. If the user asks "Tại sao bà Kim bị bắt",
-            use "Tin tức về bà Kim bị bắt" or
+        query: A search-ready query that emphasizes recency/newness or
+            website URL. For example, include terms like "tin tức",
+            "mới nhất", dates, or time ranges. If the user asks
+            "Tại sao bà Kim bị bắt", use "Tin tức về bà Kim bị bắt" or
             "Vì sao bà Kim bị bắt mới nhất".
         n: Number of results to return. Increase this for complex topics.
     """

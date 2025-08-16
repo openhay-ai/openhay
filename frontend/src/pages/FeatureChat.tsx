@@ -133,22 +133,42 @@ const FeatureChat = () => {
         };
         // Map to UI messages from new ConversationHistoryResponse parts
         const mapped: ChatMessage[] = [];
-        for (let idx = 0; idx < data.messages.length; idx++) {
+        let idx = 0;
+        while (idx < data.messages.length) {
           const part: any = data.messages[idx];
-          const id = `${data.conversation_id}-${idx}`;
           const partKind: string | undefined = part?.part_kind;
+          // Combine contiguous search_web tool-return parts into one message
+          if (partKind === "tool-return" && part?.tool_name === "search_web") {
+            const startIdx = idx;
+            const combinedResults: any[] = [];
+            while (idx < data.messages.length) {
+              const p: any = data.messages[idx];
+              const pk: string | undefined = p?.part_kind;
+              if (pk === "tool-return" && p?.tool_name === "search_web") {
+                const res = Array.isArray(p?.content) ? p.content : [];
+                combinedResults.push(...res);
+                idx += 1;
+                continue;
+              }
+              break;
+            }
+            const id = `${data.conversation_id}-${startIdx}`;
+            mapped.push({ id, role: "tool", content: "", toolName: "search_web", results: combinedResults });
+            continue;
+          }
+
+          // Regular mapping for non-tool or other tool parts
+          const id = `${data.conversation_id}-${idx}`;
           if (partKind === "user-prompt") {
             const content = typeof part?.content === "string" ? part.content : "";
             mapped.push({ id, role: "user", content });
           } else if (partKind === "text") {
             const content = typeof part?.content === "string" ? part.content : "";
             mapped.push({ id, role: "assistant", content });
-          } else if (partKind === "tool-return" && part?.tool_name === "search_web") {
-            const results = Array.isArray(part?.content) ? part.content : [];
-            mapped.push({ id, role: "tool", content: "", toolName: "search_web", results });
           } else {
             // ignore other parts (e.g., tool-call, other tools) for UI
           }
+          idx += 1;
         }
         // If nothing in history, keep preset welcome
         setMessages((prev) => (mapped.length > 0 ? mapped : prev));

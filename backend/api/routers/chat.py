@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from typing import Optional
 from uuid import UUID
 
 import logfire
@@ -11,13 +12,14 @@ from backend.core.agents.chat.deps import ChatDeps
 from backend.core.mixins import ConversationMixin
 from backend.core.models import FeatureKey, FeaturePreset
 from backend.core.repositories.conversation import ConversationRepository
-from backend.core.utils import extract_tool_return_part
+from backend.core.utils import extract_tool_return_parts
 from backend.db import AsyncSessionLocal
 from backend.settings import settings
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from pydantic_ai import BinaryContent
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 from sqlmodel import select
 
@@ -26,6 +28,7 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 class ChatRequest(ConversationMixin):
     message: str
+    media: Optional[list[BinaryContent]] = Field(default_factory=list)
 
 
 class ConversationListItem(BaseModel):
@@ -187,14 +190,11 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                     json_payload = json.dumps(evt_payload, ensure_ascii=False)
                     yield (f"event: conversation_created\ndata: {json_payload}\n\n")
 
-                # No per-message persistence; runs will be stored below
-
                 # Build message history from stored runs
                 message_history = []
                 try:
                     runs = await conversation_repo.list_message_runs(conversation.id)
                     for r in runs:
-                        # r.messages is a Python JSON-ready object (list/dict)
                         msgs = ModelMessagesTypeAdapter.validate_python(r.messages)
                         logfire.info("Message history", msgs=msgs)
                         message_history.extend(msgs)
@@ -203,8 +203,11 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                         "Failed to load message history from runs; proceeding without history"
                     )
 
+                # Build user content
+                message = payload.message
+
                 async with chat_agent.run_stream(
-                    payload.message,
+                    message,
                     deps=ChatDeps(),
                     message_history=message_history,
                 ) as result:
@@ -226,25 +229,26 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                         search_results: list[dict] = []
                         seen_urls: set[str] = set()
 
-                        tool_return_part = extract_tool_return_part(
+                        tool_return_parts = extract_tool_return_parts(
                             msgs_py,
                             "search_web",
                         )
-                        if tool_return_part:
-                            content = (
-                                tool_return_part.get("content")
-                                if isinstance(tool_return_part, dict)
-                                else getattr(tool_return_part, "content", None)
-                            )
-                            if isinstance(content, list):
-                                for item in content:
-                                    if isinstance(item, dict):
-                                        url = item.get("url")
-                                        if isinstance(url, str) and url in seen_urls:
-                                            continue
-                                        if isinstance(url, str):
-                                            seen_urls.add(url)
-                                            search_results.append(item)
+                        if tool_return_parts:
+                            for tool_return_part in tool_return_parts:
+                                content = (
+                                    tool_return_part.get("content")
+                                    if isinstance(tool_return_part, dict)
+                                    else getattr(tool_return_part, "content", None)
+                                )
+                                if isinstance(content, list):
+                                    for item in content:
+                                        if isinstance(item, dict):
+                                            url = item.get("url")
+                                            if isinstance(url, str) and url in seen_urls:
+                                                continue
+                                            if isinstance(url, str):
+                                                seen_urls.add(url)
+                                                search_results.append(item)
 
                         if search_results:
                             evt_payload = {"results": search_results}

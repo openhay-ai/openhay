@@ -33,14 +33,15 @@ def part_to_role(part: ModelRequestPart | ModelResponsePart) -> str:
     raise ValueError(f"Unknown part: {part}")
 
 
-@logfire.instrument("extract_tool_return_part")
-def extract_tool_return_part(
+@logfire.instrument("extract_tool_return_parts")
+def extract_tool_return_parts(
     messages: list[ModelMessage],
     tool_name: str,
-) -> ToolReturnPart | None:
+) -> list[ToolReturnPart]:
+    tool_return_parts: list[ToolReturnPart] = []
     for message in messages:
         for part in message.parts:
             if isinstance(part, ToolReturnPart) and part.tool_name == tool_name:
                 logfire.info("Tool found", part=part)
-                return part
-    return None
+                tool_return_parts.append(part)
+    return tool_return_parts
