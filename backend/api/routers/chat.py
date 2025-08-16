@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import json
 from datetime import datetime
 from typing import Optional
@@ -13,47 +12,17 @@ from backend.core.agents.chat.deps import ChatDeps
 from backend.core.mixins import ConversationMixin
 from backend.core.models import FeatureKey, FeaturePreset
 from backend.core.repositories.conversation import ConversationRepository
-from backend.core.utils import extract_tool_return_parts
+from backend.core.services.chat import BinaryContentIn, ChatService
 from backend.db import AsyncSessionLocal
 from backend.settings import settings
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
-from pydantic_ai import BinaryContent
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 from sqlmodel import select
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
-
-
-class BinaryContentIn(BaseModel):
-    """Incoming media item with base64-encoded data from the frontend.
-
-    We explicitly accept base64 here and decode to raw bytes before
-    constructing pydantic-ai's BinaryContent.
-    """
-
-    data: str
-    media_type: str
-    identifier: str | None = None
-
-
-def _b64_to_bytes(data: str) -> bytes:
-    """Decode either standard base64 or base64url ("-_/" variant).
-
-    Adds required padding if missing.
-    """
-    try:
-        # Fast path: try regular b64
-        return base64.b64decode(data)
-    except Exception:
-        # Normalize URL-safe alphabet and pad
-        normalized = data.replace("-", "+").replace("_", "/")
-        pad = (-len(normalized)) % 4
-        if pad:
-            normalized += "=" * pad
-        return base64.b64decode(normalized)
 
 
 class ChatRequest(ConversationMixin):
@@ -77,7 +46,7 @@ async def list_conversations() -> dict[str, list[ConversationListItem]]:
         conversation_repo = ConversationRepository(session)
         conversations = await conversation_repo.list_all()
 
-        # Avoid relationship lazy-loads in async by prefetching preset keys
+        # Avoid lazy-loads in async by prefetching preset keys
         preset_ids = {c.feature_preset_id for c in conversations}
         keys_by_preset_id: dict[str, FeatureKey] = {}
         if preset_ids:
@@ -134,7 +103,9 @@ async def list_conversations() -> dict[str, list[ConversationListItem]]:
                                     if isinstance(sub, str):
                                         tmp.append(sub)
                                     elif isinstance(sub, dict):
-                                        tv = sub.get("text") or sub.get("content")
+                                        text_val = sub.get("text")
+                                        content_val = sub.get("content")
+                                        tv = text_val or content_val
                                         if isinstance(tv, str):
                                             tmp.append(tv)
                         if tmp:
@@ -186,36 +157,18 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
     async def stream_generator():
         try:
             async with AsyncSessionLocal() as session:
-                conversation_repo = ConversationRepository(session)
+                chat_service = ChatService(session)
 
+                # Resolve existing conversation or create a new one
                 conversation = None
-                if payload.conversation_id is not None:
-                    conversation = await conversation_repo.get_by_id(payload.conversation_id)
-
                 created_new_conversation = False
-                if conversation is None:
-                    # Create a conversation with a default feature preset
-                    # TODO: accept feature key/params from payload
-                    preset = (
-                        (
-                            await session.execute(
-                                select(FeaturePreset).where(
-                                    FeaturePreset.key == FeatureKey.ai_tim_kiem
-                                )
-                            )
-                        )
-                        .scalars()
-                        .first()
+                if payload.conversation_id is not None:
+                    conversation = await chat_service.get_conversation_by_id(
+                        payload.conversation_id
                     )
-                    if preset is None:
-                        # As a fallback, just pick the first preset available
-                        stmt = select(FeaturePreset)
-                        result = await session.execute(stmt)
-                        preset = result.scalars().first()
-                    if preset is None:
-                        raise RuntimeError("No feature preset available")
-
-                    conversation = await conversation_repo.create(preset)
+                if conversation is None:
+                    create_default = chat_service.create_conversation_with_default_preset
+                    conversation = await create_default()
                     created_new_conversation = True
 
                 if created_new_conversation:
@@ -227,41 +180,12 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                     sse = f"event: conversation_created\ndata: {json_payload}\n\n"
                     yield sse
 
-                # Build message history from stored runs
-                message_history = []
-                try:
-                    runs = await conversation_repo.list_message_runs(conversation.id)
-                    for r in runs:
-                        msgs = ModelMessagesTypeAdapter.validate_python(r.messages)
-                        logfire.info("Message history", msgs=msgs)
-                        message_history.extend(msgs)
-                except Exception:
-                    logger.exception(
-                        "Failed to load message history from runs; proceeding without history"
-                    )
+                # Load message history
+                message_history = await chat_service.load_message_history(conversation.id)
 
-                # Build user content
-                message = payload.message
-
-                # Decode base64 media to bytes and build BinaryContent
-                safe_media: list[BinaryContent] = []
-                for item in payload.media or []:
-                    try:
-                        raw_bytes = _b64_to_bytes(item.data)
-                    except Exception:
-                        # If decode fails, skip this item instead of failing
-                        logger.exception("Failed to decode base64 media item; skipping")
-                        continue
-
-                    safe_media.append(
-                        BinaryContent(
-                            data=raw_bytes,
-                            media_type=item.media_type,
-                            identifier=item.identifier,
-                        )
-                    )
-
-                user_prompt = [message, *safe_media]
+                # Decode media and build user content
+                safe_media = chat_service.decode_media_items(payload.media)
+                user_prompt = [payload.message, *safe_media]
 
                 async with chat_agent.run_stream(
                     user_prompt,
@@ -281,38 +205,15 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                         logger.debug(f"SSE message: {sse_message[:100]}...")
                         yield sse_message
 
-                    # Persist the structured run for perfect reconstruction
+                    # Persist the run and emit search results
                     try:
-                        # Prefer Python-objects for JSONB column
-                        msgs_py = ModelMessagesTypeAdapter.validate_python(result.new_messages())
-                        # Emit only search_web tool results for frontend UI
-                        search_results: list[dict] = []
-                        seen_urls: set[str] = set()
-
-                        tool_return_parts = extract_tool_return_parts(
-                            msgs_py,
-                            "search_web",
+                        msgs = ModelMessagesTypeAdapter.validate_python(result.new_messages())
+                        search_results = chat_service.extract_search_results(msgs)
+                        jsonable_msgs = chat_service.to_jsonable_messages(msgs)
+                        await chat_service.persist_message_run(
+                            conversation,
+                            jsonable_msgs,
                         )
-                        if tool_return_parts:
-                            for tool_return_part in tool_return_parts:
-                                content = (
-                                    tool_return_part.get("content")
-                                    if isinstance(tool_return_part, dict)
-                                    else getattr(
-                                        tool_return_part,
-                                        "content",
-                                        None,
-                                    )
-                                )
-                                if isinstance(content, list):
-                                    for item in content:
-                                        if isinstance(item, dict):
-                                            url = item.get("url")
-                                            if isinstance(url, str) and url in seen_urls:
-                                                continue
-                                            if isinstance(url, str):
-                                                seen_urls.add(url)
-                                                search_results.append(item)
 
                         if search_results:
                             evt_payload = {"results": search_results}
@@ -324,18 +225,6 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                                 (f"SSE search_results message: {evt_payload_json[:100]}...")
                             )
                             yield (f"event: search_results\ndata: {evt_payload_json}\n\n")
-
-                        # Convert to jsonable python to avoid non-serializables
-                        from pydantic_core import to_jsonable_python
-
-                        msgs_py = to_jsonable_python(
-                            msgs_py,
-                            bytes_mode="base64",
-                        )
-                        await conversation_repo.add_message_run(
-                            conversation,
-                            msgs_py,
-                        )
                     except Exception:
                         logger.exception("Failed to persist conversation message run")
 
@@ -366,8 +255,8 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
 async def get_conversation_history(conversation_id: UUID) -> dict:
     """Return flattened message history for a conversation."""
     async with AsyncSessionLocal() as session:
-        conversation_repo = ConversationRepository(session)
-        conversation = await conversation_repo.get_by_id(conversation_id)
+        chat_service = ChatService(session)
+        conversation = await chat_service.conversation_repo.get_by_id(conversation_id)
 
         if conversation is None:
             raise HTTPException(
@@ -375,26 +264,7 @@ async def get_conversation_history(conversation_id: UUID) -> dict:
                 detail="Conversation not found",
             )
 
-        runs = await conversation_repo.list_message_runs(conversation_id)
-
-        # Build a JSON-safe list of parts with bytes encoded as base64
-        from pydantic_core import to_jsonable_python
-
-        json_safe_parts: list[dict] = []
-        for run in runs:
-            try:
-                messages = ModelMessagesTypeAdapter.validate_python(run.messages)
-                # Flatten parts across messages
-                parts = [part for message in messages for part in message.parts]
-                parts_json = to_jsonable_python(parts, bytes_mode="base64")
-                # Ensure each part is a dict for response model typing
-                for p in parts_json:
-                    if isinstance(p, dict):
-                        json_safe_parts.append(p)
-            except Exception:
-                # If any run is malformed, skip that run
-                logger.exception("Failed to serialize history run; skipping")
-                continue
+        json_safe_parts = await chat_service.serialize_history(conversation_id)
 
         logfire.info("Messages", messages=json_safe_parts)
         return ConversationHistoryResponse(
