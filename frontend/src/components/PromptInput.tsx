@@ -1,7 +1,7 @@
 import { FormEvent, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { FileIcon, Paperclip, Send } from "lucide-react";
+import { Paperclip, Send } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import AttachmentList from "@/components/AttachmentList";
 
@@ -57,9 +57,24 @@ export const PromptInput = ({
 
     if (onSubmit) {
       const filesSnapshot = files.slice();
-      await onSubmit(trimmed, filesSnapshot);
+      const valueSnapshot = trimmed;
+      // Optimistically clear UI immediately
       setValue("");
       setFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      try {
+        await onSubmit(valueSnapshot, filesSnapshot);
+        // Keep cleared on success
+      } catch (err: any) {
+        // Restore previous state on error and show toast
+        setValue(valueSnapshot);
+        setFiles(filesSnapshot);
+        console.log(err)
+        const description = typeof err?.message === "string" && err.message.trim().length > 0
+          ? err.message
+          : "Đã xảy ra lỗi khi gửi. Vui lòng thử lại.";
+        toast({ variant: "destructive", title: "Gửi thất bại", description });
+      }
       return;
     }
   };

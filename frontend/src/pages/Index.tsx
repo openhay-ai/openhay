@@ -66,12 +66,14 @@ const Index = () => {
     run();
   }, []);
 
-  const handleSubmit = (value: string) => {
+  const handleSubmit = (value: string, files?: File[]) => {
     const currentType = searchParams.get("type") ?? undefined;
     const params = new URLSearchParams();
     if (currentType) params.set("type", currentType);
     params.set("q", value);
-    navigate(`/?${params.toString()}`);
+    const to = { pathname: "/", search: `?${params.toString()}` } as const;
+    const state = files && files.length > 0 ? { files } : undefined;
+    navigate(to, { state });
   };
 
   return (

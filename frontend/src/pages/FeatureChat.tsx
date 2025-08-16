@@ -227,9 +227,13 @@ const FeatureChat = () => {
   // After consuming q once, remove it from the URL so revisits won't trigger another send.
   useEffect(() => {
     const q = searchParams.get("q");
-    if (!q) return;
+    const st = (location.state as any) || {};
+    const stateFiles = Array.isArray(st.files) ? (st.files as File[]) : undefined;
+    const hasMessage = typeof q === "string" && q.length > 0;
+    const hasFiles = Array.isArray(stateFiles) && stateFiles.length > 0;
+    if (!hasMessage && !hasFiles) return;
     (async () => {
-      await handleSend(q);
+      await handleSend(q ?? "", stateFiles);
       // Only remove q if we are already in a thread; otherwise, let the thread page remove it
       if (threadId) {
         const params = new URLSearchParams(searchParams);
@@ -357,6 +361,7 @@ const FeatureChat = () => {
 
       // Read SSE stream manually and parse events
       let createdConversationId: string | null = null;
+      let sseError: Error | null = null;
       while (true) {
         const { done, value: chunk } = await reader.read();
         if (done) break;
@@ -430,12 +435,15 @@ const FeatureChat = () => {
               // ignore
             }
           } else if (eventName === "error") {
-            // surface error to assistant bubble
             try {
               const err = JSON.parse(dataStr);
-              commitChunk(`\n\n> Lỗi: ${err?.error || "Không xác định"}`);
+              const msg = (err?.error && typeof err.error === "string") ? err.error : "Không xác định";
+              sseError = new Error(msg);
+              // abort the stream; we'll throw after the loop ends
+              try { ac.abort(); } catch {}
             } catch {
-              commitChunk("\n\n> Lỗi không xác định khi xử lý phản hồi.");
+              sseError = new Error("Lỗi không xác định khi xử lý phản hồi.");
+              try { ac.abort(); } catch {}
             }
           }
         }
@@ -455,6 +463,10 @@ const FeatureChat = () => {
         }
       }
 
+      if (sseError) {
+        throw sseError;
+      }
+
       // Only now navigate to /t/{uuid} (after stream completes) to avoid aborting the stream
       if (!canonicalId && createdConversationId) {
         const params = new URLSearchParams();
@@ -465,13 +477,15 @@ const FeatureChat = () => {
         });
       }
     } catch (e) {
+      const msg = e instanceof Error ? e.message : "Không thể kết nối đến máy chủ.";
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMsg.id
-            ? { ...m, content: m.content + "\n\n> Không thể kết nối đến máy chủ." }
+            ? { ...m, content: (m.content && m.content.trim().length > 0) ? m.content : `> ${msg}` }
             : m
         )
       );
+      throw e;
     } finally {
       setIsStreaming(false);
       abortRef.current = null;
