@@ -105,12 +105,12 @@ class ChatService:
             )
         return safe_media
 
-    def extract_search_results(self, messages: list[ModelMessage]) -> list[dict]:
+    def extract_search_results(self, messages: list[ModelMessage], tool_name: str) -> list[dict]:
         """Extract and deduplicate search results."""
         search_results: list[dict] = []
         seen_urls: set[str] = set()
 
-        tool_return_parts = extract_tool_return_parts(messages, "search_web")
+        tool_return_parts = extract_tool_return_parts(messages, tool_name)
         if tool_return_parts:
             for tool_return_part in tool_return_parts:
                 content = (
@@ -128,30 +128,6 @@ class ChatService:
                                 seen_urls.add(url)
                                 search_results.append(item)
         return search_results
-
-    def extract_fetch_url_results(self, messages: list[ModelMessage]) -> list[dict]:
-        """Extract and deduplicate fetch URL results."""
-        fetch_results: list[dict] = []
-        seen_urls: set[str] = set()
-
-        tool_return_parts = extract_tool_return_parts(messages, "fetch_url_content")
-        if tool_return_parts:
-            for tool_return_part in tool_return_parts:
-                content = (
-                    tool_return_part.get("content")
-                    if isinstance(tool_return_part, dict)
-                    else getattr(tool_return_part, "content", None)
-                )
-                if isinstance(content, list):
-                    for item in content:
-                        if isinstance(item, dict):
-                            url = item.get("url")
-                            if isinstance(url, str) and url in seen_urls:
-                                continue
-                            if isinstance(url, str):
-                                seen_urls.add(url)
-                                fetch_results.append(item)
-        return fetch_results
 
     def to_jsonable_messages(self, messages: list[ModelMessage]) -> list | dict:
         """Convert messages to JSON-safe python objects.

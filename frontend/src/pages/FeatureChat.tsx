@@ -206,46 +206,22 @@ const FeatureChat = () => {
         while (idx < data.messages.length) {
           const part: any = data.messages[idx];
           const partKind: string | undefined = part?.part_kind;
-          // Combine contiguous search_web tool-return parts into one message
-          if (partKind === "tool-return" && part?.tool_name === "search_web") {
-            const startIdx = idx;
-            const combinedResults: any[] = [];
-            while (idx < data.messages.length) {
-              const p: any = data.messages[idx];
-              const pk: string | undefined = p?.part_kind;
-              if (pk === "tool-return" && p?.tool_name === "search_web") {
-                const res = Array.isArray(p?.content) ? p.content : [];
-                combinedResults.push(...res);
-                idx += 1;
-                continue;
-              }
-              break;
-            }
-            const id = `${data.conversation_id}-${startIdx}`;
-            mapped.push({
-              id,
-              role: "tool",
-              content: "",
-              toolName: "search_web",
-              results: combinedResults,
-            });
-            continue;
-          }
-
-          // Combine contiguous fetch_url_content tool-return parts into one message
+          // Combine contiguous tool-return parts (search_web, fetch_url_content) into one message
           if (
             partKind === "tool-return" &&
-            part?.tool_name === "fetch_url_content"
+            (part?.tool_name === "search_web" ||
+              part?.tool_name === "fetch_url_content")
           ) {
+            const currentToolName: "search_web" | "fetch_url_content" =
+              part?.tool_name === "search_web"
+                ? "search_web"
+                : "fetch_url_content";
             const startIdx = idx;
             const combinedResults: any[] = [];
             while (idx < data.messages.length) {
               const p: any = data.messages[idx];
               const pk: string | undefined = p?.part_kind;
-              if (
-                pk === "tool-return" &&
-                p?.tool_name === "fetch_url_content"
-              ) {
+              if (pk === "tool-return" && p?.tool_name === currentToolName) {
                 const res = Array.isArray(p?.content) ? p.content : [];
                 combinedResults.push(...res);
                 idx += 1;
@@ -258,7 +234,7 @@ const FeatureChat = () => {
               id,
               role: "tool",
               content: "",
-              toolName: "fetch_url_content",
+              toolName: currentToolName,
               results: combinedResults,
             });
             continue;
@@ -488,6 +464,36 @@ const FeatureChat = () => {
         );
       };
 
+      const handleToolResults = (
+        toolName: "search_web" | "fetch_url_content",
+        dataStr: string
+      ) => {
+        try {
+          const parsed = JSON.parse(dataStr) as { results?: any[] };
+          const results = Array.isArray(parsed?.results) ? parsed.results : [];
+          const toolMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: "tool",
+            content: "",
+            toolName,
+            results,
+          };
+          setMessages((prev) => {
+            const idx = prev.findIndex((m) => m.id === assistantMsg.id);
+            if (idx === -1) {
+              return [...prev, toolMsg];
+            }
+            const next = prev.slice();
+            next.splice(idx, 0, toolMsg);
+            return next;
+          });
+          // Expand the latest source card by default
+          setSourceExpanded((prev) => ({ ...prev, [toolMsg.id]: true }));
+        } catch {
+          // ignore
+        }
+      };
+
       // Read SSE stream manually and parse events
       let createdConversationId: string | null = null;
       let sseError: Error | null = null;
@@ -541,62 +547,15 @@ const FeatureChat = () => {
             } catch {
               // ignore parse errors per chunk
             }
-          } else if (eventName === "search_results") {
-            // Append search_web tool results as their own message
-            try {
-              const parsed = JSON.parse(dataStr) as { results?: any[] };
-              const results = Array.isArray(parsed?.results)
-                ? parsed.results
-                : [];
-              const toolMsg: ChatMessage = {
-                id: crypto.randomUUID(),
-                role: "tool",
-                content: "",
-                toolName: "search_web",
-                results,
-              };
-              setMessages((prev) => {
-                const idx = prev.findIndex((m) => m.id === assistantMsg.id);
-                if (idx === -1) {
-                  return [...prev, toolMsg];
-                }
-                const next = prev.slice();
-                next.splice(idx, 0, toolMsg);
-                return next;
-              });
-              // Expand the latest source card by default
-              setSourceExpanded((prev) => ({ ...prev, [toolMsg.id]: true }));
-            } catch {
-              // ignore
-            }
-          } else if (eventName === "fetch_url_results") {
-            // Append fetch_url_content tool results as their own message
-            try {
-              const parsed = JSON.parse(dataStr) as { results?: any[] };
-              const results = Array.isArray(parsed?.results)
-                ? parsed.results
-                : [];
-              const toolMsg: ChatMessage = {
-                id: crypto.randomUUID(),
-                role: "tool",
-                content: "",
-                toolName: "fetch_url_content",
-                results,
-              };
-              setMessages((prev) => {
-                const idx = prev.findIndex((m) => m.id === assistantMsg.id);
-                if (idx === -1) {
-                  return [...prev, toolMsg];
-                }
-                const next = prev.slice();
-                next.splice(idx, 0, toolMsg);
-                return next;
-              });
-              // Expand the latest source card by default
-              setSourceExpanded((prev) => ({ ...prev, [toolMsg.id]: true }));
-            } catch {
-              // ignore
-            }
+          } else if (
+            eventName === "search_results" ||
+            eventName === "fetch_url_results"
+          ) {
+            const map = {
+              search_results: "search_web",
+              fetch_url_results: "fetch_url_content",
+            } as const;
+            handleToolResults(map[eventName as keyof typeof map], dataStr);
           } else if (eventName === "error") {
             try {
               const err = JSON.parse(dataStr);

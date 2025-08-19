@@ -208,8 +208,10 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                     # Persist the run and emit search results
                     try:
                         msgs = ModelMessagesTypeAdapter.validate_python(result.new_messages())
-                        search_results = chat_service.extract_search_results(msgs)
-                        fetch_url_results = chat_service.extract_fetch_url_results(msgs)
+                        search_results = chat_service.extract_search_results(msgs, "search_web")
+                        fetch_url_results = chat_service.extract_search_results(
+                            msgs, "fetch_url_content"
+                        )
                         jsonable_msgs = chat_service.to_jsonable_messages(msgs)
                         await chat_service.persist_message_run(
                             conversation,
