@@ -105,12 +105,12 @@ class ChatService:
             )
         return safe_media
 
-    def extract_search_results(self, messages: list[ModelMessage]) -> list[dict]:
+    def extract_search_results(self, messages: list[ModelMessage], tool_name: str) -> list[dict]:
         """Extract and deduplicate search results."""
         search_results: list[dict] = []
         seen_urls: set[str] = set()
 
-        tool_return_parts = extract_tool_return_parts(messages, "search_web")
+        tool_return_parts = extract_tool_return_parts(messages, tool_name)
         if tool_return_parts:
             for tool_return_part in tool_return_parts:
                 content = (

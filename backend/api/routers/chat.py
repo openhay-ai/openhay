@@ -208,7 +208,10 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                     # Persist the run and emit search results
                     try:
                         msgs = ModelMessagesTypeAdapter.validate_python(result.new_messages())
-                        search_results = chat_service.extract_search_results(msgs)
+                        search_results = chat_service.extract_search_results(msgs, "search_web")
+                        fetch_url_results = chat_service.extract_search_results(
+                            msgs, "fetch_url_content"
+                        )
                         jsonable_msgs = chat_service.to_jsonable_messages(msgs)
                         await chat_service.persist_message_run(
                             conversation,
@@ -225,6 +228,17 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                                 (f"SSE search_results message: {evt_payload_json[:100]}...")
                             )
                             yield (f"event: search_results\ndata: {evt_payload_json}\n\n")
+
+                        if fetch_url_results:
+                            evt_payload = {"results": fetch_url_results}
+                            evt_payload_json = json.dumps(
+                                evt_payload,
+                                ensure_ascii=False,
+                            )
+                            logger.debug(
+                                (f"SSE fetch_url_results message: {evt_payload_json[:100]}...")
+                            )
+                            yield (f"event: fetch_url_results\ndata: {evt_payload_json}\n\n")
                     except Exception:
                         logger.exception("Failed to persist conversation message run")
 

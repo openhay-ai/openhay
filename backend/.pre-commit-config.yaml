@@ -4,9 +4,17 @@ repos:
     hooks:
       - id: ruff
         args: [--fix]
-        types_or: [ python, pyi ]
+        types_or: [python, pyi]
       - id: ruff-format
-        types_or: [ python, pyi ]
+        types_or: [python, pyi]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
 
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v4.2.0
@@ -14,11 +22,11 @@ repos:
       - id: conventional-pre-commit
         stages: [commit-msg]
         args: [] # optional: list of Conventional Commits types to allow e.g. [feat, fix, ci, chore, test]
-        
+
   - repo: https://github.com/Yelp/detect-secrets
     rev: v1.5.0
     hooks:
       - id: detect-secrets
         args: ["--baseline", "backend/.secrets.baseline"]
         exclude: package.lock.json
-        additional_dependencies: ['gibberish-detector']
+        additional_dependencies: ["gibberish-detector"]
