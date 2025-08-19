@@ -1,7 +1,7 @@
 import logfire
 from backend.core.agents.chat.deps import ChatDeps
 from backend.core.agents.chat.prompts import system_prompt
-from backend.core.tools.search import search
+from backend.core.tools.search import search, fetch_url
 from backend.settings import settings
 from loguru import logger
 from pydantic_ai import Agent, RunContext
@@ -46,6 +46,24 @@ async def search_web(query: str, n: int) -> list:
     logger.debug(f'Searching web for "{query}" with {n} results')
     results = await search(query, n)
     return [w.model_dump() for w in results]
+
+
+@chat_agent.tool_plain(
+    docstring_format="google",
+    require_parameter_descriptions=True,
+    retries=2,
+)
+async def fetch_url_content(urls: list[str]) -> list[dict]:
+    """Fetch content directly from specific URLs
+
+    Args:
+        urls: List of complete URLs to fetch content from. Use this when the user
+            provides specific URLs they want to read or analyze, rather than
+            searching for content. Example: ["https://example.com/article1", "https://example.com/article2"]
+    """
+    logger.debug(f"Fetching content from {len(urls)} URLs: {urls}")
+    results = await fetch_url(urls)
+    return results
 
 
 if __name__ == "__main__":

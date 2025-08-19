@@ -1,7 +1,12 @@
 import SidebarNav from "@/components/layout/SidebarNav";
 import { Button } from "@/components/ui/button";
 import PromptInput from "@/components/PromptInput";
-import { useParams, useSearchParams, useNavigate, useLocation } from "react-router-dom";
+import {
+  useParams,
+  useSearchParams,
+  useNavigate,
+  useLocation,
+} from "react-router-dom";
 import { useEffect, useRef, useState, useMemo } from "react";
 import { Markdown } from "@/components/Markdown";
 import { normalizeUrlForMatch } from "@/lib/utils";
@@ -34,11 +39,23 @@ type ChatMessage = {
 };
 
 // Temporary preset mapping until backend API wiring
-const PRESET_DISPLAY: Record<string, { title: string; description?: string } | undefined> = {
+const PRESET_DISPLAY: Record<
+  string,
+  { title: string; description?: string } | undefined
+> = {
   default: { title: "AI Tìm kiếm", description: "Hỏi nhanh, trích nguồn." },
-  homework: { title: "Giải bài tập", description: "Giải thích từng bước, có ví dụ." },
-  writing: { title: "AI Viết văn", description: "Viết mượt, tự nhiên, mạch lạc." },
-  translate: { title: "Dịch", description: "Dịch giữ nguyên thuật ngữ, tên riêng." },
+  homework: {
+    title: "Giải bài tập",
+    description: "Giải thích từng bước, có ví dụ.",
+  },
+  writing: {
+    title: "AI Viết văn",
+    description: "Viết mượt, tự nhiên, mạch lạc.",
+  },
+  translate: {
+    title: "Dịch",
+    description: "Dịch giữ nguyên thuật ngữ, tên riêng.",
+  },
   summary: { title: "Tóm tắt", description: "Tóm tắt trọng tâm ngắn gọn." },
   mindmap: { title: "Mindmap", description: "Lập sơ đồ ý dạng cây." },
 };
@@ -54,7 +71,8 @@ const PRESET_DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
 };
 
 const initialMessagesFor = (typeParam: string | undefined): ChatMessage[] => {
-  const effectiveType = typeParam && PRESET_DISPLAY[typeParam] ? typeParam : "default";
+  const effectiveType =
+    typeParam && PRESET_DISPLAY[typeParam] ? typeParam : "default";
   const preset = PRESET_DISPLAY[effectiveType];
   if (!preset) return [];
   return [
@@ -74,11 +92,18 @@ const FeatureChat = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const typeParam = searchParams.get("type") ?? undefined;
-  const [messages, setMessages] = useState<ChatMessage[]>(() => initialMessagesFor(typeParam));
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    initialMessagesFor(typeParam)
+  );
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const messagesRef = useRef<ChatMessage[]>(messages);
-  const featureParams = useMemo(() => PRESET_DEFAULT_PARAMS[typeParam ?? "default"] ?? {}, [typeParam]);
-  const [sourceExpanded, setSourceExpanded] = useState<Record<string, boolean>>({});
+  const featureParams = useMemo(
+    () => PRESET_DEFAULT_PARAMS[typeParam ?? "default"] ?? {},
+    [typeParam]
+  );
+  const [sourceExpanded, setSourceExpanded] = useState<Record<string, boolean>>(
+    {}
+  );
 
   const normalizeBase64 = (input: string): string => {
     let out = input.replace(/-/g, "+").replace(/_/g, "/");
@@ -89,28 +114,55 @@ const FeatureChat = () => {
     return out;
   };
 
-  // Build URL -> metadata map from any 
-  // search_web tool results present in the message list
+  // Build URL -> metadata map from any
+  // search_web and fetch_url_content tool results present in the message list
   const linkMeta = useMemo(() => {
-    const map: Record<string, { url: string; title?: string; description?: string; hostname?: string; favicon?: string }> = {};
+    const map: Record<
+      string,
+      {
+        url: string;
+        title?: string;
+        description?: string;
+        hostname?: string;
+        favicon?: string;
+      }
+    > = {};
     for (const m of messages) {
-      if (m.role === "tool" && m.toolName === "search_web" && Array.isArray(m.results)) {
+      if (
+        m.role === "tool" &&
+        (m.toolName === "search_web" || m.toolName === "fetch_url_content") &&
+        Array.isArray(m.results)
+      ) {
         for (const it of m.results) {
           const url: string | undefined = it?.url;
           if (!url) continue;
           const key = normalizeUrlForMatch(url);
           if (map[key]) continue;
-          const hostname: string | undefined = it?.meta_url?.hostname || it?.profile?.long_name;
-          const favicon: string | undefined = it?.meta_url?.favicon || it?.profile?.img;
-          const title: string | undefined = it?.title;
-          const description: string | undefined = it?.description;
+
+          // For fetch_url_content results, extract hostname from URL since meta_url might not exist
+          let hostname: string | undefined =
+            it?.meta_url?.hostname || it?.profile?.long_name;
+          let favicon: string | undefined =
+            it?.meta_url?.favicon || it?.profile?.img;
+          let title: string | undefined = it?.title;
+          let description: string | undefined = it?.description;
+
+          // If fetched content doesn't have title/description, use URL parts
+          if (m.toolName === "fetch_url_content" && !hostname) {
+            try {
+              const urlObj = new URL(url);
+              hostname = urlObj.hostname;
+            } catch {
+              // ignore invalid URL
+            }
+          }
+
           map[key] = { url, title, description, hostname, favicon };
         }
       }
     }
     return map;
   }, [messages]);
-
 
   // reset initial message when feature type changes
   useEffect(() => {
@@ -154,14 +206,22 @@ const FeatureChat = () => {
         while (idx < data.messages.length) {
           const part: any = data.messages[idx];
           const partKind: string | undefined = part?.part_kind;
-          // Combine contiguous search_web tool-return parts into one message
-          if (partKind === "tool-return" && part?.tool_name === "search_web") {
+          // Combine contiguous tool-return parts (search_web, fetch_url_content) into one message
+          if (
+            partKind === "tool-return" &&
+            (part?.tool_name === "search_web" ||
+              part?.tool_name === "fetch_url_content")
+          ) {
+            const currentToolName: "search_web" | "fetch_url_content" =
+              part?.tool_name === "search_web"
+                ? "search_web"
+                : "fetch_url_content";
             const startIdx = idx;
             const combinedResults: any[] = [];
             while (idx < data.messages.length) {
               const p: any = data.messages[idx];
               const pk: string | undefined = p?.part_kind;
-              if (pk === "tool-return" && p?.tool_name === "search_web") {
+              if (pk === "tool-return" && p?.tool_name === currentToolName) {
                 const res = Array.isArray(p?.content) ? p.content : [];
                 combinedResults.push(...res);
                 idx += 1;
@@ -170,7 +230,13 @@ const FeatureChat = () => {
               break;
             }
             const id = `${data.conversation_id}-${startIdx}`;
-            mapped.push({ id, role: "tool", content: "", toolName: "search_web", results: combinedResults });
+            mapped.push({
+              id,
+              role: "tool",
+              content: "",
+              toolName: currentToolName,
+              results: combinedResults,
+            });
             continue;
           }
 
@@ -189,24 +255,36 @@ const FeatureChat = () => {
                   continue;
                 }
                 if (item && typeof item === "object") {
-                  const kind: string | undefined = (item as any)?.kind ?? (item as any)?.part_kind;
+                  const kind: string | undefined =
+                    (item as any)?.kind ?? (item as any)?.part_kind;
                   const data: unknown = (item as any)?.data;
-                  const mediaType: unknown = (item as any)?.media_type ?? (item as any)?.mime_type;
-                  const identifier: string | undefined = (item as any)?.identifier ?? (item as any)?.name;
+                  const mediaType: unknown =
+                    (item as any)?.media_type ?? (item as any)?.mime_type;
+                  const identifier: string | undefined =
+                    (item as any)?.identifier ?? (item as any)?.name;
                   if (
-                    (kind === "binary" || typeof (item as any)?.data === "string") &&
+                    (kind === "binary" ||
+                      typeof (item as any)?.data === "string") &&
                     typeof data === "string" &&
                     typeof mediaType === "string"
                   ) {
-                    const src = `data:${mediaType};base64,${normalizeBase64(data)}`;
+                    const src = `data:${mediaType};base64,${normalizeBase64(
+                      data
+                    )}`;
                     media.push({ src, mediaType, identifier });
                   }
                 }
               }
             }
-            mapped.push({ id, role: "user", content, media: media.length ? media : undefined });
+            mapped.push({
+              id,
+              role: "user",
+              content,
+              media: media.length ? media : undefined,
+            });
           } else if (partKind === "text") {
-            const content = typeof part?.content === "string" ? part.content : "";
+            const content =
+              typeof part?.content === "string" ? part.content : "";
             mapped.push({ id, role: "assistant", content });
           } else {
             // ignore other parts (e.g., tool-call, other tools) for UI
@@ -228,7 +306,9 @@ const FeatureChat = () => {
   useEffect(() => {
     const q = searchParams.get("q");
     const st = (location.state as any) || {};
-    const stateFiles = Array.isArray(st.files) ? (st.files as File[]) : undefined;
+    const stateFiles = Array.isArray(st.files)
+      ? (st.files as File[])
+      : undefined;
     const hasMessage = typeof q === "string" && q.length > 0;
     const hasFiles = Array.isArray(stateFiles) && stateFiles.length > 0;
     if (!hasMessage && !hasFiles) return;
@@ -238,7 +318,13 @@ const FeatureChat = () => {
       if (threadId) {
         const params = new URLSearchParams(searchParams);
         params.delete("q");
-        navigate({ pathname: location.pathname, search: params.toString() ? `?${params.toString()}` : "" }, { replace: true });
+        navigate(
+          {
+            pathname: location.pathname,
+            search: params.toString() ? `?${params.toString()}` : "",
+          },
+          { replace: true }
+        );
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -263,8 +349,15 @@ const FeatureChat = () => {
   const handleSend = async (value: string, files?: File[]) => {
     if (isStreaming) return;
     // Auto-collapse all source cards except the latest one when user sends a new message
-    const toolIds = messagesRef.current.filter((m) => m.role === "tool" && m.toolName === "search_web").map((m) => m.id);
-    const lastToolId = toolIds.length > 0 ? toolIds[toolIds.length - 1] : undefined;
+    const toolIds = messagesRef.current
+      .filter(
+        (m) =>
+          m.role === "tool" &&
+          (m.toolName === "search_web" || m.toolName === "fetch_url_content")
+      )
+      .map((m) => m.id);
+    const lastToolId =
+      toolIds.length > 0 ? toolIds[toolIds.length - 1] : undefined;
     setSourceExpanded((prev) => {
       const next = { ...prev } as Record<string, boolean>;
       for (const id of Object.keys(next)) {
@@ -287,7 +380,9 @@ const FeatureChat = () => {
       const extractUuidFromThreadId = (raw?: string): string | undefined => {
         if (!raw) return undefined;
         // Try to find a UUID anywhere in the string
-        const uuidMatch = raw.match(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/);
+        const uuidMatch = raw.match(
+          /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/
+        );
         return uuidMatch ? uuidMatch[0] : undefined;
       };
 
@@ -309,7 +404,8 @@ const FeatureChat = () => {
         const media = files.map((f, idx) => {
           const dataUrl = dataUrls[idx] || "";
           const commaIdx = dataUrl.indexOf(",");
-          const base64Data = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl;
+          const base64Data =
+            commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl;
           return {
             data: base64Data,
             media_type: f.type || "application/octet-stream",
@@ -327,12 +423,21 @@ const FeatureChat = () => {
           }))
           .filter((m) => m.mediaType.startsWith("image/"));
 
-        userMsg = { id: crypto.randomUUID(), role: "user", content: value, media: previewMedia };
+        userMsg = {
+          id: crypto.randomUUID(),
+          role: "user",
+          content: value,
+          media: previewMedia,
+        };
       } else {
         userMsg = { id: crypto.randomUUID(), role: "user", content: value };
       }
 
-      assistantMsg = { id: crypto.randomUUID(), role: "assistant", content: "" };
+      assistantMsg = {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: "",
+      };
       setMessages((prev) => [...prev, userMsg!, assistantMsg!]);
 
       const res = await fetch(getChatSseUrl(), {
@@ -357,6 +462,36 @@ const FeatureChat = () => {
               : m
           )
         );
+      };
+
+      const handleToolResults = (
+        toolName: "search_web" | "fetch_url_content",
+        dataStr: string
+      ) => {
+        try {
+          const parsed = JSON.parse(dataStr) as { results?: any[] };
+          const results = Array.isArray(parsed?.results) ? parsed.results : [];
+          const toolMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: "tool",
+            content: "",
+            toolName,
+            results,
+          };
+          setMessages((prev) => {
+            const idx = prev.findIndex((m) => m.id === assistantMsg.id);
+            if (idx === -1) {
+              return [...prev, toolMsg];
+            }
+            const next = prev.slice();
+            next.splice(idx, 0, toolMsg);
+            return next;
+          });
+          // Expand the latest source card by default
+          setSourceExpanded((prev) => ({ ...prev, [toolMsg.id]: true }));
+        } catch {
+          // ignore
+        }
       };
 
       // Read SSE stream manually and parse events
@@ -392,7 +527,9 @@ const FeatureChat = () => {
 
           if (eventName === "conversation_created") {
             try {
-              const parsed = JSON.parse(dataStr) as { conversation_id?: string };
+              const parsed = JSON.parse(dataStr) as {
+                conversation_id?: string;
+              };
               const cid = parsed?.conversation_id;
               if (cid) {
                 createdConversationId = cid;
@@ -402,48 +539,40 @@ const FeatureChat = () => {
             }
           } else if (eventName === "ai_message") {
             try {
-              const parsed = JSON.parse(dataStr) as { chunk?: { content?: string } };
+              const parsed = JSON.parse(dataStr) as {
+                chunk?: { content?: string };
+              };
               const chunk = parsed?.chunk?.content ?? "";
               if (chunk) commitChunk(chunk);
             } catch {
               // ignore parse errors per chunk
             }
-          } else if (eventName === "search_results") {
-            // Append search_web tool results as their own message
-            try {
-              const parsed = JSON.parse(dataStr) as { results?: any[] };
-              const results = Array.isArray(parsed?.results) ? parsed.results : [];
-              const toolMsg: ChatMessage = {
-                id: crypto.randomUUID(),
-                role: "tool",
-                content: "",
-                toolName: "search_web",
-                results,
-              };
-              setMessages((prev) => {
-                const idx = prev.findIndex((m) => m.id === assistantMsg.id);
-                if (idx === -1) {
-                  return [...prev, toolMsg];
-                }
-                const next = prev.slice();
-                next.splice(idx, 0, toolMsg);
-                return next;
-              });
-              // Expand the latest source card by default
-              setSourceExpanded((prev) => ({ ...prev, [toolMsg.id]: true }));
-            } catch {
-              // ignore
-            }
+          } else if (
+            eventName === "search_results" ||
+            eventName === "fetch_url_results"
+          ) {
+            const map = {
+              search_results: "search_web",
+              fetch_url_results: "fetch_url_content",
+            } as const;
+            handleToolResults(map[eventName as keyof typeof map], dataStr);
           } else if (eventName === "error") {
             try {
               const err = JSON.parse(dataStr);
-              const msg = (err?.error && typeof err.error === "string") ? err.error : "Không xác định";
+              const msg =
+                err?.error && typeof err.error === "string"
+                  ? err.error
+                  : "Không xác định";
               sseError = new Error(msg);
               // abort the stream; we'll throw after the loop ends
-              try { ac.abort(); } catch {}
+              try {
+                ac.abort();
+              } catch {}
             } catch {
               sseError = new Error("Lỗi không xác định khi xử lý phản hồi.");
-              try { ac.abort(); } catch {}
+              try {
+                ac.abort();
+              } catch {}
             }
           }
         }
@@ -454,7 +583,8 @@ const FeatureChat = () => {
         try {
           const lines = buffer.split(/\r?\n/);
           let dataLines: string[] = [];
-          for (const line of lines) if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+          for (const line of lines)
+            if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
           const parsed = JSON.parse(dataLines.join("\n"));
           const chunk = parsed?.chunk?.content ?? "";
           if (chunk) commitChunk(chunk);
@@ -471,17 +601,24 @@ const FeatureChat = () => {
       if (!canonicalId && createdConversationId) {
         const params = new URLSearchParams();
         if (typeParam) params.set("type", typeParam);
-        navigate(`/t/${createdConversationId}?${params.toString()}` , {
+        navigate(`/t/${createdConversationId}?${params.toString()}`, {
           replace: true,
           state: { preloadMessages: messagesRef.current },
         });
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Không thể kết nối đến máy chủ.";
+      const msg =
+        e instanceof Error ? e.message : "Không thể kết nối đến máy chủ.";
       setMessages((prev) =>
         prev.map((m) =>
           m.id === assistantMsg.id
-            ? { ...m, content: (m.content && m.content.trim().length > 0) ? m.content : `> ${msg}` }
+            ? {
+                ...m,
+                content:
+                  m.content && m.content.trim().length > 0
+                    ? m.content
+                    : `> ${msg}`,
+              }
             : m
         )
       );
@@ -495,9 +632,17 @@ const FeatureChat = () => {
   const SourceCard = ({ item, index }: { item: any; index: number }) => {
     const title: string = item?.title ?? item?.url ?? "Nguồn";
     const url: string = item?.url ?? "";
-    const host: string = item?.meta_url?.hostname || item?.profile?.long_name || "";
+    let host: string =
+      item?.meta_url?.hostname || item?.profile?.long_name || "";
     const favicon: string =
       item?.meta_url?.favicon || item?.profile?.img || "/favicon.ico";
+    if (!host && typeof url === "string" && url) {
+      try {
+        host = new URL(url).hostname;
+      } catch {
+        // ignore invalid URL
+      }
+    }
     return (
       <Card className="h-full">
         <CardContent className="p-4 flex items-start gap-3">
@@ -546,7 +691,11 @@ const FeatureChat = () => {
               {/* Messages */}
               <div className="space-y-3">
                 {messages.map((m) => {
-                  if (m.role === "tool" && m.toolName === "search_web") {
+                  if (
+                    m.role === "tool" &&
+                    (m.toolName === "search_web" ||
+                      m.toolName === "fetch_url_content")
+                  ) {
                     const results = Array.isArray(m.results) ? m.results : [];
                     const isOpen = !!sourceExpanded[m.id];
                     return (
@@ -556,18 +705,33 @@ const FeatureChat = () => {
                             <button
                               type="button"
                               className="flex w-full items-center justify-between hover:opacity-80"
-                              onClick={() => setSourceExpanded((prev) => ({ ...prev, [m.id]: !isOpen }))}
+                              onClick={() =>
+                                setSourceExpanded((prev) => ({
+                                  ...prev,
+                                  [m.id]: !isOpen,
+                                }))
+                              }
                               aria-expanded={isOpen}
                               aria-controls={`sources-${m.id}`}
                             >
                               <div className="text-sm font-medium text-muted-foreground">
                                 {results.length} nguồn
                               </div>
-                              <ChevronDown className={`size-4 transition-transform ${isOpen ? "rotate-180" : "rotate-0"}`} />
+                              <ChevronDown
+                                className={`size-4 transition-transform ${
+                                  isOpen ? "rotate-180" : "rotate-0"
+                                }`}
+                              />
                             </button>
                             {isOpen ? (
-                              <div id={`sources-${m.id}`} className="relative mt-3">
-                                <Carousel opts={{ align: "start" }} className="w-full">
+                              <div
+                                id={`sources-${m.id}`}
+                                className="relative mt-3"
+                              >
+                                <Carousel
+                                  opts={{ align: "start" }}
+                                  className="w-full"
+                                >
                                   <CarouselContent>
                                     {results.map((it, idx) => (
                                       <CarouselItem
@@ -593,13 +757,17 @@ const FeatureChat = () => {
                     <div
                       key={m.id}
                       className={
-                        m.role === "user" ? "flex justify-end" : "flex justify-start"
+                        m.role === "user"
+                          ? "flex justify-end"
+                          : "flex justify-start"
                       }
                     >
                       <div
                         className={
                           "max-w-[80%] rounded-2xl px-4 py-2 text-sm " +
-                          (m.role === "user" ? "bg-emerald-600 text-white" : "bg-card border")
+                          (m.role === "user"
+                            ? "bg-emerald-600 text-white"
+                            : "bg-card border")
                         }
                       >
                         {m.role === "assistant" ? (
@@ -614,7 +782,12 @@ const FeatureChat = () => {
                         ) : (
                           <>
                             {Array.isArray(m.media) && m.media.length > 0 ? (
-                              <AttachmentList media={m.media} variant={m.role === "user" ? "onAccent" : "default"} />
+                              <AttachmentList
+                                media={m.media}
+                                variant={
+                                  m.role === "user" ? "onAccent" : "default"
+                                }
+                              />
                             ) : null}
                             <div>{m.content}</div>
                           </>
@@ -636,5 +809,3 @@ const FeatureChat = () => {
 };
 
 export default FeatureChat;
-
-
