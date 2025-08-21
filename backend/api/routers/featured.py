@@ -66,7 +66,6 @@ async def get_today_featured(
             cnt = len(existing_today)
             msg = f"Found {cnt} existing featured items for {today}"
             logger.info(msg)
-            use_day = today
             use_suggestions = existing_today
         else:
             # After 6am local time, start generating today's featured
@@ -79,11 +78,11 @@ async def get_today_featured(
             cnt = len(yesterday_featured)
             msg = f"Returning {cnt} featured items for {yesterday}"
             logger.info(msg)
-            use_day = yesterday
             use_suggestions = yesterday_featured
 
-        # Join with articles for the selected day
-        articles = await art_repo.list_by_day(use_day)
+        # Join with articles by explicit IDs to avoid filtering by fetched_at
+        article_ids = [s.article_id for s in use_suggestions]
+        articles = await art_repo.list_by_ids(article_ids)
         article_by_id = {a.id: a for a in articles}
 
         items: list[dict] = []

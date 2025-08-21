@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from typing import Iterable, Optional
+from uuid import UUID
 
 from backend.core.models import Article
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,5 +46,13 @@ class ArticleRepository(BaseRepository[Article]):
             .where(col(Article.fetched_at).between(start, end))
             .order_by(Article.fetched_at.desc())
         )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def list_by_ids(self, ids: Iterable[UUID]) -> list[Article]:
+        ids_list = list(ids)
+        if not ids_list:
+            return []
+        stmt = select(Article).where(Article.id.in_(ids_list))
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
