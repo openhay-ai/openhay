@@ -4,7 +4,7 @@ from backend.core.agents.research.prompts import (
     subagent_system_prompt,
 )
 from backend.core.services.web_discovery import WebDiscovery
-from backend.core.services.ratelimit import gemini_flash_limiter
+from backend.core.services.ratelimit import gemini_flash_limiter, run_with_quota_and_retry
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.toolsets import FunctionToolset
 import asyncio
@@ -105,9 +105,12 @@ async def run_blocking_subagent(ctx: RunContext[ResearchDeps], prompt: str) -> s
     Returns:
         str: The subagent's complete research report
     """
-    # Respect Gemini Flash rate limit: 10 requests/minute
-    await gemini_flash_limiter().acquire()
-    r = await subagent.run(prompt, deps=ctx.deps, usage=ctx.usage)
+    # Respect Gemini Flash rate limit and retry on 429s with server-suggested backoff
+    r = await run_with_quota_and_retry(
+        gemini_flash_limiter(),
+        lambda: subagent.run(prompt, deps=ctx.deps, usage=ctx.usage),
+        max_attempts=3,
+    )
     return r.output
 
 
@@ -127,8 +130,11 @@ async def run_parallel_subagents(ctx: RunContext[ResearchDeps], prompts: list[st
     """
 
     async def _one(p: str) -> str:
-        await gemini_flash_limiter().acquire()
-        res = await subagent.run(p, deps=ctx.deps, usage=ctx.usage)
+        res = await run_with_quota_and_retry(
+            gemini_flash_limiter(),
+            lambda: subagent.run(p, deps=ctx.deps, usage=ctx.usage),
+            max_attempts=3,
+        )
         return res.output
 
     # Safety cap to avoid runaway fan-out

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+import re
+import random
 from time import monotonic
 from typing import Deque, Dict
 
@@ -65,9 +67,54 @@ def gemini_pro_limiter() -> SlidingWindowRateLimiter:
     return RateLimiterRegistry.get("gemini-pro-rpm", max_calls=5, per_seconds=60.0)
 
 
+async def run_with_quota_and_retry(
+    limiter: SlidingWindowRateLimiter,
+    operation,
+    *,
+    max_attempts: int = 3,
+) -> object:
+    """Run an async operation under a limiter with robust retry on quota errors.
+
+    - Acquires the provided limiter before each attempt
+    - Retries on Google Gemini 429 RESOURCE_EXHAUSTED using server-suggested retryDelay when available
+    - Uses a small jitter to avoid thundering herd
+    """
+
+    attempt = 0
+    while True:
+        attempt += 1
+        await limiter.acquire()
+        try:
+            return await operation()
+        except Exception as exc:  # Lazy import and targeted handling
+            # Only handle Google Gemini quota errors; otherwise re-raise
+            try:
+                from google.genai.errors import ClientError  # type: ignore
+            except Exception:  # If library shape changes or not present, re-raise
+                raise
+
+            if isinstance(exc, ClientError) and "RESOURCE_EXHAUSTED" in str(exc):
+                # Try to extract server-provided retry delay (e.g., "'retryDelay': '51s'")
+                message = str(exc)
+                m = re.search(r"'retryDelay':\s*'(?P<secs>\d+)s'", message)
+                delay_seconds = float(m.group("secs")) if m else 60.0
+                # Add small jitter (0-0.5s) and exponential factor per attempt
+                backoff = delay_seconds * (1.2 ** (attempt - 1)) + random.random() * 0.5
+
+                if attempt >= max_attempts:
+                    raise
+
+                await asyncio.sleep(backoff)
+                continue
+
+            # Non-quota or unknown error: propagate
+            raise
+
+
 __all__ = [
     "SlidingWindowRateLimiter",
     "RateLimiterRegistry",
     "gemini_flash_limiter",
     "gemini_pro_limiter",
+    "run_with_quota_and_retry",
 ]
