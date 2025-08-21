@@ -8,12 +8,12 @@ from uuid import UUID
 import logfire
 from backend.api.routers.models.responses import ConversationHistoryResponse
 from backend.core.agents.chat.agent import chat_agent
-from backend.core.services.ratelimit import gemini_flash_limiter
 from backend.core.agents.chat.deps import ChatDeps
 from backend.core.mixins import ConversationMixin
 from backend.core.models import FeatureKey, FeaturePreset
 from backend.core.repositories.conversation import ConversationRepository
 from backend.core.services.chat import BinaryContentIn, ChatService
+from backend.core.services.llm_invoker import llm_invoker
 from backend.db import AsyncSessionLocal
 from backend.settings import settings
 from fastapi import APIRouter, HTTPException
@@ -188,8 +188,8 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                 safe_media = chat_service.decode_media_items(payload.media)
                 user_prompt = [payload.message, *safe_media]
 
-                # Respect Gemini Flash 10 rpm before opening the stream
-                await gemini_flash_limiter().acquire()
+                # Respect provider-specific RPM before opening the stream
+                await llm_invoker.acquire()
 
                 async with chat_agent.run_stream(
                     user_prompt,

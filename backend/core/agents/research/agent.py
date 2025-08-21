@@ -1,13 +1,14 @@
+import asyncio
+
 from backend.core.agents.research.deps import ResearchDeps
 from backend.core.agents.research.prompts import (
     lead_agent_system_prompt,
     subagent_system_prompt,
 )
+from backend.core.services.llm_invoker import llm_invoker
 from backend.core.services.web_discovery import WebDiscovery
-from backend.core.services.ratelimit import gemini_flash_limiter, run_with_quota_and_retry
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.toolsets import FunctionToolset
-import asyncio
 
 
 async def web_search(query: str, max_results: int = 10) -> list[dict]:
@@ -32,7 +33,10 @@ async def web_search(query: str, max_results: int = 10) -> list[dict]:
         - Can be called in parallel with other tools for efficiency
     """
     svc = WebDiscovery()
-    search_results = await svc.fetch_search_results(query=query, count=max_results)
+    search_results = await svc.fetch_search_results(
+        query=query,
+        count=max_results,
+    )
     return [sr.model_dump() for sr in search_results]
 
 
@@ -105,10 +109,13 @@ async def run_blocking_subagent(ctx: RunContext[ResearchDeps], prompt: str) -> s
     Returns:
         str: The subagent's complete research report
     """
-    # Respect Gemini Flash rate limit and retry on 429s with server-suggested backoff
-    r = await run_with_quota_and_retry(
-        gemini_flash_limiter(),
-        lambda: subagent.run(prompt, deps=ctx.deps, usage=ctx.usage),
+    # Run with provider-agnostic RPM limit and retries
+    r = await llm_invoker.run(
+        lambda: subagent.run(
+            prompt,
+            deps=ctx.deps,
+            usage=ctx.usage,
+        ),
         max_attempts=3,
     )
     return r.output
@@ -119,7 +126,10 @@ async def run_blocking_subagent(ctx: RunContext[ResearchDeps], prompt: str) -> s
     require_parameter_descriptions=True,
     retries=3,
 )
-async def run_parallel_subagents(ctx: RunContext[ResearchDeps], prompts: list[str]) -> list[str]:
+async def run_parallel_subagents(
+    ctx: RunContext[ResearchDeps],
+    prompts: list[str],
+) -> list[str]:
     """Run multiple research subagents concurrently.
 
     Args:
@@ -130,9 +140,12 @@ async def run_parallel_subagents(ctx: RunContext[ResearchDeps], prompts: list[st
     """
 
     async def _one(p: str) -> str:
-        res = await run_with_quota_and_retry(
-            gemini_flash_limiter(),
-            lambda: subagent.run(p, deps=ctx.deps, usage=ctx.usage),
+        res = await llm_invoker.run(
+            lambda: subagent.run(
+                p,
+                deps=ctx.deps,
+                usage=ctx.usage,
+            ),
             max_attempts=3,
         )
         return res.output

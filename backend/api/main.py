@@ -3,8 +3,8 @@ from __future__ import annotations
 import logfire
 from backend.api.routers.chat import router as chat_router
 from backend.api.routers.featured import router as featured_router
-from backend.api.routers.research import router as research_router
 from backend.api.routers.health import router as health_router
+from backend.api.routers.research import router as research_router
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -24,7 +24,7 @@ def _get_cors_origins() -> list[str]:
 
 app = FastAPI(title="Open AI Hay API")
 
-logfire.configure()
+logfire.configure(scrubbing=False)
 logfire.instrument_fastapi(app)
 
 

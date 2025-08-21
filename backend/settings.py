@@ -28,7 +28,7 @@ class Settings(BaseSettings):
         if self.llm == "openai":
             return "openai:gpt-4o"
         elif self.llm == "anthropic":
-            return "anthropic:claude-3-7-sonnet-20250219"
+            return "anthropic:claude-4-sonnet-20250514"
         elif self.llm == "google":
             return "google-gla:gemini-2.5-flash"
         elif self.llm == "ollama":
