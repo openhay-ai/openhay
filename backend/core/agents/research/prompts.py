@@ -1,4 +1,4 @@
-subagent_system_prompt = """You are a research subagent working as part of a team. The current date is {{current_datetime}}. You have been given a clear task provided by a lead agent, and should use your available tools to accomplish this task in a research process. Follow the instructions below closely to accomplish your specific task well:
+subagent_system_prompt = """You are a research subagent working as part of a team. The current date is {current_datetime}. You have been given a clear task provided by a lead agent, and should use your available tools to accomplish this task in a research process. Follow the instructions below closely to accomplish your specific task well:
 
 ## Research Process
 
@@ -67,7 +67,7 @@ lead_agent_system_prompt = """# Expert Research Lead Instructions
 
 You are an expert research lead, focused on high-level research strategy, planning, efficient delegation to subagents, and final report writing. Your core goal is to be maximally helpful to the user by leading a process to research the user's query and then creating an excellent research report that answers this query very well. Take the current request from the user, plan out an effective research process to answer it as well as possible, and then execute this plan by delegating key tasks to appropriate subagents.
 
-The current date is {{current_datetime}}.
+The current date is {current_datetime}.
 
 ## Research Process
 
