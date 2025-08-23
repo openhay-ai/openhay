@@ -8,6 +8,7 @@ from backend.core.agents.research.prompts import (
 from backend.core.services.llm_invoker import llm_invoker
 from backend.core.services.web_discovery import WebDiscovery
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
 from pydantic_ai.toolsets import FunctionToolset
 
 
@@ -77,10 +78,19 @@ async def complete_task(report: str) -> str:
 base_toolset = FunctionToolset(tools=[web_search, web_fetch, complete_task])
 
 
+subagent_model = GoogleModel("gemini-2.5-flash")
+subagent_settings = GoogleModelSettings(
+    google_thinking_config={
+        "thinking_budget": 2048,
+        "include_thoughts": True,
+    }
+)
 subagent = Agent(
-    "google-gla:gemini-2.5-flash",
+    subagent_model,
+    model_settings=subagent_settings,
     toolsets=[base_toolset],
     output_type=str,
+    name="subagent",
 )
 
 
@@ -92,39 +102,13 @@ async def subagent_instructions(ctx: RunContext[ResearchDeps]) -> str:
 
 
 # Lead Research Agent
-lead_research_toolset = FunctionToolset(max_retries=3)
+lead_research_toolset = FunctionToolset(max_retries=0)
 
 
 @lead_research_toolset.tool(
     docstring_format="google",
     require_parameter_descriptions=True,
-    retries=3,
-)
-async def run_blocking_subagent(ctx: RunContext[ResearchDeps], prompt: str) -> str:
-    """Create and run a research subagent with specific instructions.
-
-    Args:
-        prompt (str): Detailed task instructions for the subagent
-
-    Returns:
-        str: The subagent's complete research report
-    """
-    # Run with provider-agnostic RPM limit and retries
-    r = await llm_invoker.run(
-        lambda: subagent.run(
-            prompt,
-            deps=ctx.deps,
-            usage=ctx.usage,
-        ),
-        max_attempts=3,
-    )
-    return r.output
-
-
-@lead_research_toolset.tool(
-    docstring_format="google",
-    require_parameter_descriptions=True,
-    retries=3,
+    retries=0,
 )
 async def run_parallel_subagents(
     ctx: RunContext[ResearchDeps],
@@ -133,22 +117,28 @@ async def run_parallel_subagents(
     """Run multiple research subagents concurrently.
 
     Args:
-        prompts (list[str]): A list of detailed task instructions, one per subagent.
+        prompts (list[str]): A list of detailed task instructions,
+            one per subagent.
 
     Returns:
-        list[str]: Each subagent's complete research report in the same order as prompts.
+        list[str]: Each subagent's complete research report in the same
+            order as prompts.
     """
 
+    # Limit concurrent subagent executions
+    semaphore = asyncio.Semaphore(1)
+
     async def _one(p: str) -> str:
-        res = await llm_invoker.run(
-            lambda: subagent.run(
-                p,
-                deps=ctx.deps,
-                usage=ctx.usage,
-            ),
-            max_attempts=3,
-        )
-        return res.output
+        async with semaphore:
+            res = await llm_invoker.run(
+                lambda: subagent.run(
+                    p,
+                    deps=ctx.deps,
+                    usage=ctx.usage,
+                ),
+                max_attempts=3,
+            )
+            return res.output
 
     # Safety cap to avoid runaway fan-out
     if len(prompts) > 10:
@@ -157,15 +147,26 @@ async def run_parallel_subagents(
     return await asyncio.gather(*[_one(p) for p in prompts])
 
 
+lead_research_model = GoogleModel("gemini-2.5-flash")
+lead_research_settings = GoogleModelSettings(
+    google_thinking_config={
+        "thinking_budget": 8096,
+        "include_thoughts": True,
+    }
+)
 lead_research_agent = Agent(
-    "google-gla:gemini-2.5-flash",
-    toolsets=[lead_research_toolset],
+    lead_research_model,
+    model_settings=lead_research_settings,
+    # Do not attach function tools here; we'll provide deferred tools
+    # at runtime in the router
     output_type=str,
 )
 
 
 @lead_research_agent.instructions
-async def lead_research_agent_instructions(ctx: RunContext[ResearchDeps]) -> str:
+async def lead_research_agent_instructions(
+    ctx: RunContext[ResearchDeps],
+) -> str:
     return lead_agent_system_prompt.format(
         current_datetime=ctx.deps.current_datetime,
     )

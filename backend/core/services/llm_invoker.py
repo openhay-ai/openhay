@@ -36,8 +36,8 @@ def _resolve_rpm(provider: str, model: str) -> int:
 
     if p.startswith("google"):
         if "gemini-2.5-flash" in m:
-            return 10
-        return 5
+            return 5
+        return 3
     if p.startswith("openai"):
         return 50
     if p.startswith("anthropic"):
