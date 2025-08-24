@@ -15,7 +15,7 @@ const primaryItems: Array<Item & { to?: string }> = [
   { label: "Dịch", icon: Languages, to: "/?type=translate" },
   { label: "Tóm tắt", icon: Zap, to: "/?type=summary" },
   { label: "Mindmap", icon: Brain, to: "/?type=mindmap" },
-  { label: "Tìm sâu", icon: Search, to: "/research" },
+  { label: "AI Nghiên cứu", icon: Search, to: "/research" },
   { label: "Lịch sử", icon: History, to: "/history" },
 ];
 

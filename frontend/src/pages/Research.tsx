@@ -2,11 +2,13 @@ import SidebarNav from "@/components/layout/SidebarNav";
 import PromptInput from "@/components/PromptInput";
 import { Markdown } from "@/components/Markdown";
 import { Card, CardContent } from "@/components/ui/card";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown, Loader2, Clock } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getResearchSseUrl } from "@/lib/api";
+import SourceCard from "@/components/SourceCard";
+import { normalizeUrlForMatch } from "@/lib/utils";
 
-type ThinkingEntry = { id: string; content: string; open: boolean };
+type ThinkingEntry = { id: string; content: string; open: boolean; ts: number };
 
 type SearchQueryEntry = {
   id: string; // tool_call_id from backend
@@ -31,6 +33,14 @@ const Research = () => {
   const [step2Shown, setStep2Shown] = useState(false); // nghiên cứu
   const [step3Writing, setStep3Writing] = useState(false); // viết báo cáo
   const [step3Done, setStep3Done] = useState(false);
+  const [step1Open, setStep1Open] = useState(true);
+  const [step2Open, setStep2Open] = useState(true);
+  const [step3Open, setStep3Open] = useState(true);
+  const [showLoader, setShowLoader] = useState(false);
+  const [gotFirstThinking, setGotFirstThinking] = useState(false);
+  const [startAt, setStartAt] = useState<number | null>(null);
+  const [elapsedSec, setElapsedSec] = useState<number>(0);
+  const timerRef = useRef<number | null>(null);
 
   const endRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -60,6 +70,16 @@ const Research = () => {
     setTimelineVisible(false);
     setHasSubmitted(true);
     setUserMessage(value);
+    setShowLoader(true);
+    setStartAt(Date.now());
+    setElapsedSec(0);
+    if (timerRef.current) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    timerRef.current = window.setInterval(() => {
+      setElapsedSec((s) => s + 1);
+    }, 1000);
 
     const ac = new AbortController();
     abortRef.current = ac;
@@ -78,10 +98,10 @@ const Research = () => {
       const decoder: any = new TextDecoder("utf-8");
       let buffer = "";
 
-      const pushThinking = (text: string) => {
+      const pushThinking = (text: string, ts?: number) => {
         setThinkingEntries((prev) => [
           ...prev,
-          { id: crypto.randomUUID(), content: text, open: true },
+          { id: crypto.randomUUID(), content: text, open: true, ts: ts ?? Date.now() },
         ]);
       };
 
@@ -107,9 +127,11 @@ const Research = () => {
 
           if (eventName === "lead_thinking") {
             try {
-              const parsed = JSON.parse(dataStr) as { thinking?: string };
+              const parsed = JSON.parse(dataStr) as { thinking?: string; ts?: number };
               const t = parsed?.thinking?.trim();
-              if (t) pushThinking(t);
+              if (t) pushThinking(t, parsed?.ts);
+              if (!gotFirstThinking) setGotFirstThinking(true);
+              setShowLoader(false);
             } catch {}
           } else if (eventName === "lead_answer") {
             setLeadPlan((prev) => (prev ? prev : JSON.parse(dataStr).answer || ""));
@@ -153,6 +175,10 @@ const Research = () => {
               const parsed = JSON.parse(dataStr) as { report?: string };
               setFinalReport(parsed?.report || "");
               setStep3Done(true);
+              if (timerRef.current) {
+                window.clearInterval(timerRef.current);
+                timerRef.current = null;
+              }
             } catch {}
           }
         }
@@ -189,18 +215,9 @@ const Research = () => {
             <ChevronDown className={`size-4 transition-transform ${entry.open ? "rotate-180" : "rotate-0"}`} />
           </button>
           {entry.open ? (
-            <div id={`q-${entry.id}`} className="mt-3 space-y-2">
+            <div id={`q-${entry.id}`} className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {entry.results.map((r, idx) => (
-                <div key={idx} className="text-sm">
-                  <a
-                    href={r?.url || "#"}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="hover:underline"
-                  >
-                    {r?.title || r?.url || "Nguồn"}
-                  </a>
-                </div>
+                <SourceCard key={idx} item={r} index={idx} />
               ))}
             </div>
           ) : null}
@@ -225,7 +242,7 @@ const Research = () => {
               aria-expanded={entry.open}
               aria-controls={`think-${entry.id}`}
             >
-              <div className="text-sm font-medium text-muted-foreground">Thought process</div>
+              <div className="text-sm font-medium text-muted-foreground">Tư duy</div>
               <ChevronDown className={`size-4 transition-transform ${entry.open ? "rotate-180" : "rotate-0"}`} />
             </button>
             {entry.open ? (
@@ -244,6 +261,54 @@ const Research = () => {
     [queries, queryOrder]
   );
 
+  const totalSources = useMemo(() => {
+    let total = 0;
+    for (const q of queryEntries) total += q?.results?.length || 0;
+    return total;
+  }, [queryEntries]);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        window.clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
+
+  const formatTime = (sec: number): string => {
+    const m = Math.floor(sec / 60)
+      .toString()
+      .padStart(2, "0");
+    const s = (sec % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  };
+
+  // Build link metadata for Markdown hover previews
+  const linkMeta = useMemo(() => {
+    const map: Record<string, { url: string; title?: string; description?: string; hostname?: string; favicon?: string }> = {};
+    for (const q of Object.values(queries)) {
+      for (const it of q.results) {
+        const url: string | undefined = (it as any)?.url;
+        if (!url) continue;
+        const key = normalizeUrlForMatch(url);
+        if (map[key]) continue;
+        let hostname: string | undefined = (it as any)?.meta_url?.hostname || (it as any)?.profile?.long_name;
+        let favicon: string | undefined = (it as any)?.meta_url?.favicon || (it as any)?.profile?.img;
+        let title: string | undefined = (it as any)?.title;
+        let description: string | undefined = (it as any)?.description;
+        if (!hostname) {
+          try {
+            const u = new URL(url);
+            hostname = u.hostname;
+          } catch {}
+        }
+        map[key] = { url, title, description, hostname, favicon };
+      }
+    }
+    return map;
+  }, [queries]);
+
   return (
     <div className="min-h-screen flex w-full overflow-hidden">
       <SidebarNav />
@@ -252,7 +317,7 @@ const Research = () => {
         <main className="h-full overflow-auto w-full px-3 md:px-6">
           <header className="flex justify-between items-center gap-3 py-4">
             <div>
-              <h1 className="text-2xl font-semibold">Tìm sâu</h1>
+              <h1 className="text-2xl font-semibold">AI Nghiên cứu</h1>
               <p className="text-muted-foreground text-sm">Nghiên cứu đa nguồn, có dòng thời gian.</p>
             </div>
           </header>
@@ -275,16 +340,49 @@ const Research = () => {
                 </div>
               ) : null}
 
+              {/* Typing loader shown until first thinking arrives */}
+              {showLoader ? (
+                <div className="flex justify-start">
+                  <div className="max-w-[80%] rounded-2xl px-4 py-2 text-sm bg-card border">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Loader2 className="size-4 animate-spin" />
+                      <span>Để xem...</span>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Thinking boxes (appear before the timeline) */}
+              {thinkingEntries.map((t) => (
+                <ThinkingItem key={t.id} entry={t} />
+              ))}
+
               {/* Timeline */}
               {timelineVisible ? (
-                <div className="space-y-3">
+                <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium text-muted-foreground">Tiến trình nghiên cứu</div>
+                    <div className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="size-3" />
+                      <span className="tabular-nums">{formatTime(elapsedSec)}</span>
+                    </div>
+                  </div>
+                  {/* Step 1 */}
                   <div className="flex items-start gap-3">
                     <div className={`mt-1 h-2 w-2 rounded-full ${step1Done ? "bg-emerald-600" : "bg-amber-500"}`} />
                     <div className="flex-1">
-                      <div className="text-sm font-medium">
-                        {step1Done ? "Đã tạo kế hoạch" : "Đang tạo kế hoạch"}
-                      </div>
-                      {leadPlan ? (
+                      <button
+                        type="button"
+                        className="flex w-full items-center justify-between text-left"
+                        onClick={() => setStep1Open((o) => !o)}
+                        aria-expanded={step1Open}
+                      >
+                        <div className="text-sm font-medium">
+                          {step1Done ? "Đã tạo kế hoạch" : "Đang tạo kế hoạch"}
+                        </div>
+                        <ChevronDown className={`size-4 transition-transform ${step1Open ? "rotate-180" : "rotate-0"}`} />
+                      </button>
+                      {step1Open && leadPlan ? (
                         <div className="mt-2 text-sm">
                           <Markdown content={leadPlan} />
                         </div>
@@ -292,41 +390,61 @@ const Research = () => {
                     </div>
                   </div>
 
+                  {/* Step 2 */}
                   {step2Shown ? (
                     <div className="flex items-start gap-3">
-                      <div className="mt-1 h-2 w-2 rounded-full bg-amber-500" />
+                      <div className={`mt-1 h-2 w-2 rounded-full ${step3Writing || step3Done ? "bg-emerald-600" : "bg-amber-500"}`} />
                       <div className="flex-1">
-                        <div className="text-sm font-medium">Đang nghiên cứu</div>
-                        <div className="mt-2 space-y-2">
-                          {queryEntries.map((q) => (
-                            <QueryItem key={q.id} entry={q} />
-                          ))}
-                        </div>
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-between text-left"
+                          onClick={() => setStep2Open((o) => !o)}
+                          aria-expanded={step2Open}
+                        >
+                          <div className="text-sm font-medium flex items-center gap-2">
+                            {step3Writing || step3Done ? "Nghiên cứu hoàn tất" : "Đang nghiên cứu"}
+                            <span className="inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-secondary text-[10px]">
+                              {totalSources} nguồn
+                            </span>
+                          </div>
+                          <ChevronDown className={`size-4 transition-transform ${step2Open ? "rotate-180" : "rotate-0"}`} />
+                        </button>
+                        {step2Open ? (
+                          <div className="mt-2 space-y-2">
+                            {queryEntries.map((q) => (
+                              <QueryItem key={q.id} entry={q} />
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   ) : null}
 
+                  {/* Step 3 */}
                   {step3Writing || step3Done ? (
                     <div className="flex items-start gap-3">
                       <div className={`mt-1 h-2 w-2 rounded-full ${step3Done ? "bg-emerald-600" : "bg-amber-500"}`} />
-                      <div className="flex-1 text-sm font-medium">
-                        {step3Done ? "Đã hoàn tất báo cáo!" : "Đang viết báo cáo cuối cùng"}
+                      <div className="flex-1">
+                        <button
+                          type="button"
+                          className="flex w-full items-center justify-between text-left"
+                          onClick={() => setStep3Open((o) => !o)}
+                          aria-expanded={step3Open}
+                        >
+                          <div className="text-sm font-medium">{step3Done ? "Đã hoàn tất báo cáo!" : "Đang viết báo cáo cuối cùng"}</div>
+                          <ChevronDown className={`size-4 transition-transform ${step3Open ? "rotate-180" : "rotate-0"}`} />
+                        </button>
                       </div>
                     </div>
                   ) : null}
                 </div>
               ) : null}
 
-              {/* Thinking boxes */}
-              {thinkingEntries.map((t) => (
-                <ThinkingItem key={t.id} entry={t} />
-              ))}
-
               {/* Final report as AI bubble */}
               {finalReport ? (
                 <div className="flex justify-start">
                   <div className="max-w-[80%] rounded-2xl px-4 py-2 text-sm bg-card border">
-                    <Markdown content={finalReport} />
+                    <Markdown content={finalReport} linkMeta={linkMeta} />
                   </div>
                 </div>
               ) : null}
