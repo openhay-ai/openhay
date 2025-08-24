@@ -122,8 +122,11 @@ async def run_research(payload: ResearchRequest) -> StreamingResponse:
                             if final_result_found:
                                 # After request completes, stream the text output so
                                 # lead_answer reflects the actual assistant text.
-                                async for output in req_stream.stream_text(delta=True):
-                                    lead_answer += output
+                                try:
+                                    async for output in req_stream.stream_text(delta=True):
+                                        lead_answer += output
+                                except Exception as e:
+                                    logger.error(f"Error streaming text: {e}")
                             # Emit thinking for this request
                             yield _sse(
                                 "lead_thinking",
@@ -235,6 +238,10 @@ async def run_research(payload: ResearchRequest) -> StreamingResponse:
                                         assert sub_run.result is not None
                                 results.append(sub_run.result.output if sub_run.result else "")
 
+                        yield _sse(
+                            "subagent_completed",
+                            {},
+                        )
                     # Return the concatenated reports of all subagents
                     trp = ToolReturnPart(
                         tool_name=call.tool_name,
