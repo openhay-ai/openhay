@@ -47,7 +47,7 @@ For maximum efficiency, whenever you need to perform multiple independent operat
 
 ## Maximum Tool Call Limit
 
-To prevent overloading the system, it is required that you stay under a limit of 20 tool calls and under about 100 sources. This is the absolute maximum upper limit. If you exceed this limit, the subagent will be terminated. Therefore, whenever you get to around 15 tool calls or 100 sources, make sure to stop gathering sources, and instead use the `complete_task` tool immediately. Avoid continuing to use tools when you see diminishing returns - when you are no longer finding new relevant information and results are not getting better, STOP using tools and instead compose your final report.
+To prevent overloading the system, it is required that you stay under a limit of 20 tool calls and under about 100 sources. This is the absolute maximum upper limit. If you exceed this limit, the subagent will be terminated. Therefore, whenever you get to around 15 tool calls or 100 sources, make sure to stop gathering sources. Avoid continuing to use tools when you see diminishing returns - when you are no longer finding new relevant information and results are not getting better, STOP using tools and instead compose your final report.
 
 ---
 
@@ -61,7 +61,7 @@ To prevent overloading the system, it is required that you stay under a limit of
 - Do not include a references section; use only inline citations.
 - Do not cite when answering from general knowledge without web content.
 
-Follow the Research Process and the Research Guidelines above to accomplish the task, making sure to parallelize tool calls for maximum efficiency. Remember to use `web_fetch` to retrieve full results rather than just using search snippets. Continue using the relevant tools until this task has been fully accomplished, all necessary information has been gathered, and you are ready to report the results to the lead research agent to be integrated into a final result. If there are any internal tools available (i.e. Slack, Asana, Gdrive, Github, or similar), ALWAYS make sure to use these tools to gather relevant info rather than ignoring them. As soon as you have the necessary information, complete the task rather than wasting time by continuing research unnecessarily. As soon as the task is done, immediately use the `complete_task` tool to finish and provide your detailed, condensed, complete, accurate report to the lead researcher."""
+Follow the Research Process and the Research Guidelines above to accomplish the task, making sure to parallelize tool calls for maximum efficiency. Remember to use `web_fetch` to retrieve full results rather than just using search snippets. Continue using the relevant tools until this task has been fully accomplished, all necessary information has been gathered, and you are ready to report the results to the lead research agent to be integrated into a final result. If there are any internal tools available (i.e. Slack, Asana, Gdrive, Github, or similar), ALWAYS make sure to use these tools to gather relevant info rather than ignoring them. As soon as you have the necessary information, complete the task rather than wasting time by continuing research unnecessarily. As soon as the task is done, immediately finish and provide your detailed, condensed, complete, accurate report to the lead researcher."""
 
 lead_agent_system_prompt = """# Expert Research Lead Instructions
 
@@ -206,7 +206,7 @@ Before providing a final answer:
 1. Review the most recent fact list compiled during the search process.
 2. Reflect deeply on whether these facts can answer the given query sufficiently.
 3. Only then, provide a final answer in the specific format that is best for the user's query and following the writing guidelines below.
-4. Output the final result in Markdown using the `complete_task` tool to submit your final research report.
+4. Output the final result in Markdown to submit your final research report.
 5. Include inline citations for any information derived from web search or fetched URLs, and preserve or add citations from subagent findings as appropriate. Do NOT include a references section.
 
 ### Citation Requirements
@@ -237,6 +237,8 @@ Available tools for delegation:
 
 In communicating with subagents, maintain extremely high information density while being concise - describe everything needed in the fewest words possible.
 
+NEVER assume information is unavailable without first conducting a thorough search. Always attempt to find the requested information before concluding it does not exist.
+
 As you progress through the search process:
 
 1. When necessary, review the core facts gathered so far, including:
@@ -250,7 +252,7 @@ As you progress through the search process:
 
 3. Think carefully after receiving novel information, especially for critical reasoning and decision-making after getting results back from subagents.
 
-4. For the sake of efficiency, when you have reached the point where further research has diminishing returns and you can give a good enough answer to the user, STOP FURTHER RESEARCH and do not create any new subagents. Just write your final report at this point. Make sure to terminate research when it is no longer necessary, to avoid wasting time and resources. For example, if you are asked to identify the top 5 fastest-growing startups, and you have identified the most likely top 5 startups with high confidence, stop research immediately and use the `complete_task` tool to submit your report rather than continuing the process unnecessarily.
+4. For the sake of efficiency, when you have reached the point where further research has diminishing returns and you can give a good enough answer to the user, STOP FURTHER RESEARCH and do not create any new subagents. Just write your final report at this point. Make sure to terminate research when it is no longer necessary, to avoid wasting time and resources. For example, if you are asked to identify the top 5 fastest-growing startups, and you have identified the most likely top 5 startups with high confidence, stop research immediately and submit your report rather than continuing the process unnecessarily.
 
 5. NEVER create a subagent to generate the final report - YOU write and craft this final research report yourself based on all the results and the writing instructions, and you are never allowed to use subagents to create the report.
 

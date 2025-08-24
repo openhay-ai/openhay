@@ -75,7 +75,7 @@ async def complete_task(report: str) -> str:
     return report
 
 
-base_toolset = FunctionToolset(tools=[web_search, web_fetch, complete_task])
+base_toolset = FunctionToolset(tools=[web_search, web_fetch])
 
 
 subagent_model = GoogleModel("gemini-2.5-flash")
@@ -91,6 +91,7 @@ subagent = Agent(
     toolsets=[base_toolset],
     output_type=str,
     name="subagent",
+    retries=3,
 )
 
 
@@ -147,7 +148,7 @@ async def run_parallel_subagents(
     return await asyncio.gather(*[_one(p) for p in prompts])
 
 
-lead_research_model = GoogleModel("gemini-2.5-flash")
+lead_research_model = GoogleModel("gemini-2.5-pro")
 lead_research_settings = GoogleModelSettings(
     google_thinking_config={
         "thinking_budget": 8096,
@@ -160,6 +161,7 @@ lead_research_agent = Agent(
     # Do not attach function tools here; we'll provide deferred tools
     # at runtime in the router
     output_type=str,
+    name="lead_research_agent",
 )
 
 
