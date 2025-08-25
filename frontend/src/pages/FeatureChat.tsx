@@ -32,7 +32,7 @@ type ChatMedia = {
 
 type ChatMessage = {
   id: string;
-  role: "user" | "assistant" | "system" | "tool";
+  role: "user" | "assistant" | "system" | "tool" | "thinking";
   content: string;
   media?: ChatMedia[];
   toolName?: string;
@@ -105,6 +105,10 @@ const FeatureChat = () => {
   const [sourceExpanded, setSourceExpanded] = useState<Record<string, boolean>>(
     {}
   );
+  const [thinkingExpanded, setThinkingExpanded] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [overlayHeight, setOverlayHeight] = useState<number>(120);
 
   const normalizeBase64 = (input: string): string => {
     let out = input.replace(/-/g, "+").replace(/_/g, "/");
@@ -277,6 +281,13 @@ const FeatureChat = () => {
                 }
               }
             }
+            if (content.trim().length === 0) {
+              // Skip purely empty text prompts, but still render attachments-only prompts
+              if (media.length === 0) {
+                idx += 1;
+                continue;
+              }
+            }
             mapped.push({
               id,
               role: "user",
@@ -287,6 +298,10 @@ const FeatureChat = () => {
             const content =
               typeof part?.content === "string" ? part.content : "";
             mapped.push({ id, role: "assistant", content });
+          } else if (partKind === "thinking") {
+            const content =
+              typeof part?.content === "string" ? part.content : "";
+            mapped.push({ id, role: "thinking", content });
           } else {
             // ignore other parts (e.g., tool-call, other tools) for UI
           }
@@ -647,11 +662,51 @@ const FeatureChat = () => {
             </div>
           </header>
 
-          <section className="max-w-3xl mx-auto pb-40">
+          <section
+            className="max-w-3xl mx-auto"
+            style={{ paddingBottom: Math.max(overlayHeight + 16, 64) }}
+          >
             <div className="flex flex-col gap-4 mt-6">
               {/* Messages */}
               <div className="space-y-3">
                 {messages.map((m) => {
+                  if (m.role === "thinking") {
+                    const isOpen = thinkingExpanded[m.id] ?? true;
+                    return (
+                      <div key={m.id} className="flex justify-start">
+                        <div className="max-w-[80%] w-full">
+                          <div className="rounded-lg border bg-muted/30 p-3">
+                            <button
+                              type="button"
+                              className="flex w-full items-center justify-between hover:opacity-80"
+                              onClick={() =>
+                                setThinkingExpanded((prev) => ({
+                                  ...prev,
+                                  [m.id]: !isOpen,
+                                }))
+                              }
+                              aria-expanded={isOpen}
+                              aria-controls={`think-${m.id}`}
+                            >
+                              <div className="text-sm font-medium text-muted-foreground">
+                                Tư duy
+                              </div>
+                              <ChevronDown
+                                className={`size-4 transition-transform ${
+                                  isOpen ? "rotate-180" : "rotate-0"
+                                }`}
+                              />
+                            </button>
+                            {isOpen ? (
+                              <div id={`think-${m.id}`} className="mt-2 text-sm">
+                                <Markdown content={m.content} />
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
                   if (
                     m.role === "tool" &&
                     (m.toolName === "search_web" ||
@@ -760,7 +815,12 @@ const FeatureChat = () => {
                 <div ref={endRef} />
               </div>
 
-              <PromptInput onSubmit={handleSend} fixed disabled={isStreaming} />
+              <PromptInput
+                onSubmit={handleSend}
+                fixed
+                disabled={isStreaming}
+                onOverlayHeightChange={(h) => setOverlayHeight(h)}
+              />
             </div>
           </section>
         </main>

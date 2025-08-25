@@ -162,6 +162,7 @@ lead_research_agent = Agent(
     # at runtime in the router
     output_type=str,
     name="lead_research_agent",
+    retries=3,
 )
 
 

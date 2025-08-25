@@ -2,6 +2,8 @@ import SidebarNav from "@/components/layout/SidebarNav";
 import PromptInput from "@/components/PromptInput";
 import { Markdown } from "@/components/Markdown";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useNavigate } from "react-router-dom";
 import { ChevronDown, Loader2, Clock } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getResearchSseUrl } from "@/lib/api";
@@ -18,15 +20,18 @@ type SearchQueryEntry = {
 };
 
 const Research = () => {
+  const navigate = useNavigate();
   const [isStreaming, setIsStreaming] = useState(false);
   const [thinkingEntries, setThinkingEntries] = useState<ThinkingEntry[]>([]);
   const [leadPlan, setLeadPlan] = useState<string>("");
   const [queries, setQueries] = useState<Record<string, SearchQueryEntry>>({});
   const [queryOrder, setQueryOrder] = useState<string[]>([]);
   const [finalReport, setFinalReport] = useState<string>("");
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [timelineVisible, setTimelineVisible] = useState(false);
   const [hasSubmitted, setHasSubmitted] = useState(false);
   const [userMessage, setUserMessage] = useState<string>("");
+  const [overlayHeight, setOverlayHeight] = useState<number>(120);
 
   // Timeline states
   const [step1Done, setStep1Done] = useState(false); // kế hoạch
@@ -69,6 +74,7 @@ const Research = () => {
     setStep3Done(false);
     setTimelineVisible(false);
     setHasSubmitted(true);
+    setOverlayHeight(0);
     setUserMessage(value);
     setShowLoader(true);
     setStartAt(Date.now());
@@ -125,7 +131,14 @@ const Research = () => {
           }
           const dataStr = dataLines.join("\n");
 
-          if (eventName === "lead_thinking") {
+          if (eventName === "conversation_created") {
+            try {
+              const parsed = JSON.parse(dataStr) as { conversation_id?: string };
+              if (parsed?.conversation_id) {
+                setConversationId(parsed.conversation_id);
+              }
+            } catch {}
+          } else if (eventName === "lead_thinking") {
             try {
               const parsed = JSON.parse(dataStr) as { thinking?: string; ts?: number };
               const t = parsed?.thinking?.trim();
@@ -317,17 +330,17 @@ const Research = () => {
         <main className="h-full overflow-auto w-full px-3 md:px-6">
           <header className="flex justify-between items-center gap-3 py-4">
             <div>
-              <h1 className="text-2xl font-semibold">AI Nghiên cứu</h1>
-              <p className="text-muted-foreground text-sm">Nghiên cứu đa nguồn, có dòng thời gian.</p>
+              <h1 className="text-2xl font-semibold">Nghiên cứu chuyên sâu</h1>
+              <p className="text-muted-foreground text-sm">Tổng hợp và phân tích từ nhiều nguồn để cho ra câu trả lời cặn kẽ nhất.</p>
             </div>
           </header>
 
-          <section className="max-w-3xl mx-auto pb-40">
+          <section className="max-w-3xl mx-auto" style={{ paddingBottom: Math.max(overlayHeight + 16, 64) }}>
             <div className="flex flex-col gap-4 mt-6">
               {/* Intro helper when idle */}
               {!timelineVisible && !hasSubmitted ? (
                 <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-                  Nhập câu hỏi bất kì để bắt đầu nghiên cứu. Hệ thống sẽ tạo kế hoạch, tra cứu nhiều nguồn và tổng hợp báo cáo cuối cùng.
+                  Bạn cần tìm hiểu về gì? Cứ để AI lo. Từ việc lên kế hoạch, tìm kiếm, đến tổng hợp thành một báo cáo hoàn chỉnh.
                 </div>
               ) : null}
 
@@ -449,9 +462,30 @@ const Research = () => {
                 </div>
               ) : null}
 
+              {conversationId ? (
+                <div className="flex justify-start">
+                  <Button
+                    className="mt-3"
+                    variant="default"
+                    onClick={() => navigate(`/t/${conversationId}`)}
+                  >
+                    Tiếp tục trò chuyện
+                  </Button>
+                </div>
+              ) : null}
+
               <div ref={endRef} />
 
-              <PromptInput onSubmit={handleSend} fixed disabled={isStreaming} />
+              {!hasSubmitted ? (
+                <PromptInput
+                  onSubmit={handleSend}
+                  fixed
+                  disabled={isStreaming}
+                  placeholder="Chủ đề bạn muốn nghiên cứu là gì?"
+                  ctaLabel="Nghiên cứu"
+                  onOverlayHeightChange={(h) => setOverlayHeight(h)}
+                />
+              ) : null}
             </div>
           </section>
         </main>

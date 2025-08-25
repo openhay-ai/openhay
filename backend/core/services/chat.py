@@ -5,7 +5,7 @@ from typing import Optional
 from uuid import UUID
 
 import logfire
-from backend.core.models import FeatureKey, FeaturePreset
+from backend.core.models import Conversation, FeatureKey, FeaturePreset
 from backend.core.repositories.conversation import ConversationRepository
 from backend.core.utils import extract_tool_return_parts
 from loguru import logger
@@ -44,7 +44,7 @@ class ChatService:
         """Return conversation by id or None."""
         return await self.conversation_repo.get_by_id(conversation_id)
 
-    async def create_conversation_with_default_preset(self) -> object:
+    async def create_conversation_with_default_preset(self) -> Conversation:
         """Create a new conversation using the default preset.
 
         Falls back to the first available preset if the default is

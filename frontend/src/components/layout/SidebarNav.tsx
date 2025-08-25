@@ -9,18 +9,18 @@ interface Item {
 }
 
 const primaryItems: Array<Item & { to?: string }> = [
-  { label: "AI Tìm kiếm", icon: Home, to: "/" },
-  { label: "Giải bài tập", icon: GraduationCap, to: "/?type=homework" },
-  { label: "AI Viết văn", icon: PenLine, to: "/?type=writing" },
-  { label: "Dịch", icon: Languages, to: "/?type=translate" },
-  { label: "Tóm tắt", icon: Zap, to: "/?type=summary" },
-  { label: "Mindmap", icon: Brain, to: "/?type=mindmap" },
-  { label: "AI Nghiên cứu", icon: Search, to: "/research" },
+  { label: "Hỏi đáp AI", icon: Home, to: "/" },
+  { label: "Nghiên cứu chuyên sâu", icon: Search, to: "/research" },
+  { label: "Gỡ rối bài tập", icon: GraduationCap, to: "/?type=homework" },
+  { label: "Chắp bút cùng AI", icon: PenLine, to: "/?type=writing" },
+  { label: "AI Dịch thuật", icon: Languages, to: "/?type=translate" },
+  { label: "Tóm tắt thần tốc", icon: Zap, to: "/?type=summary" },
+  { label: "Tạo Mindmap AI", icon: Brain, to: "/?type=mindmap" },
   { label: "Lịch sử", icon: History, to: "/history" },
 ];
 
 const secondaryItems: Item[] = [
-  { label: "Trợ giúp", icon: CircleHelp },
+  { label: "Hỗ trợ", icon: CircleHelp },
 ];
 
 export const SidebarNav = () => {
