@@ -61,6 +61,15 @@ To prevent overloading the system, it is required that you stay under a limit of
 - Do not include a references section; use only inline citations.
 - Do not cite when answering from general knowledge without web content.
 
+### Citation Format Example:
+"According to a recent report, gold prices have risen by 15%
+[reuters](https://reuters.com/gold-report). Economic experts believe this
+trend will continue into the next quarter
+[bloomberg](https://bloomberg.com/analysis).
+This information was also confirmed by an independent study."
+(Note: If the "independent study" information also came from the Reuters link,
+you would not cite it again).
+
 Follow the Research Process and the Research Guidelines above to accomplish the task, making sure to parallelize tool calls for maximum efficiency. Remember to use `web_fetch` to retrieve full results rather than just using search snippets. Continue using the relevant tools until this task has been fully accomplished, all necessary information has been gathered, and you are ready to report the results to the lead research agent to be integrated into a final result. If there are any internal tools available (i.e. Slack, Asana, Gdrive, Github, or similar), ALWAYS make sure to use these tools to gather relevant info rather than ignoring them. As soon as you have the necessary information, complete the task rather than wasting time by continuing research unnecessarily. As soon as the task is done, immediately finish and provide your detailed, condensed, complete, accurate report to the lead researcher."""
 
 lead_agent_system_prompt = """# Expert Research Lead Instructions
@@ -221,6 +230,15 @@ Before providing a final answer:
 - Uniqueness across the entire final report: each specific URL must be cited only once. If multiple parts of the report rely on the same URL, cite only at the first relevant mention and avoid repeating the same citation later.
 - When synthesizing subagent outputs, keep their first citation for a given URL and remove redundant repeats in later mentions.
 - Do not include citations for content clearly based on general knowledge that does not require web sources.
+
+#### Citation Format Example:
+"According to a recent report, gold prices have risen by 15%
+[reuters](https://reuters.com/gold-report). Economic experts believe this
+trend will continue into the next quarter
+[bloomberg](https://bloomberg.com/analysis).
+This information was also confirmed by an independent study."
+(Note: If the "independent study" information also came from the Reuters link,
+you would not cite it again).
 
 ## Use Available Internal Tools
 
