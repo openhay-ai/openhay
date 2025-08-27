@@ -13,6 +13,7 @@ import { normalizeUrlForMatch } from "@/lib/utils";
 // no slug needed; route is /t/{uuid}
 import { getChatSseUrl, getChatHistoryUrl } from "@/lib/api";
 import { Loader2, ChevronDown } from "lucide-react";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
   Carousel,
   CarouselContent,
@@ -109,6 +110,10 @@ const FeatureChat = () => {
     {}
   );
   const [overlayHeight, setOverlayHeight] = useState<number>(120);
+  const [errorNotice, setErrorNotice] = useState<
+    { title?: string; message: string; retryAfterSec?: number } | null
+  >(null);
+  const lastAttemptRef = useRef<{ value: string; files?: File[] } | null>(null);
 
   const normalizeBase64 = (input: string): string => {
     let out = input.replace(/-/g, "+").replace(/_/g, "/");
@@ -362,8 +367,20 @@ const FeatureChat = () => {
 
   const abortRef = useRef<AbortController | null>(null);
 
+  const retryLast = async () => {
+    if (isStreaming) return;
+    const last = lastAttemptRef.current;
+    if (!last) return;
+    setErrorNotice(null);
+    await handleSend(last.value, last.files);
+  };
+
   const handleSend = async (value: string, files?: File[]) => {
     if (isStreaming) return;
+    // Remember last attempt for Retry
+    lastAttemptRef.current = { value, files };
+    // Clear any previous error banner when starting a new attempt
+    setErrorNotice(null);
     // Auto-collapse all source cards except the latest one when user sends a new message
     const toolIds = messagesRef.current
       .filter(
@@ -392,6 +409,7 @@ const FeatureChat = () => {
     abortRef.current = ac;
     setIsStreaming(true);
 
+    let sseErrorInfo: { message: string; retryAfterSec?: number } | null = null;
     try {
       const extractUuidFromThreadId = (raw?: string): string | undefined => {
         if (!raw) return undefined;
@@ -574,18 +592,43 @@ const FeatureChat = () => {
             handleToolResults(map[eventName as keyof typeof map], dataStr);
           } else if (eventName === "error") {
             try {
-              const err = JSON.parse(dataStr);
-              const msg =
-                err?.error && typeof err.error === "string"
-                  ? err.error
-                  : "Không xác định";
-              sseError = new Error(msg);
+              const err = JSON.parse(dataStr) as any;
+              const detailsStr =
+                typeof err?.details === "string" ? (err.details as string) : "";
+              // Try to extract retry delay from provider details, e.g. "retryDelay': '55s'"
+              const m = detailsStr.match(/retryDelay['\"]?\s*:\s*['\"](?<sec>\d+)s['\"]/);
+              const sec = m && m.groups && m.groups.sec ? Number(m.groups.sec) : undefined;
+              const friendly =
+                typeof sec === "number"
+                  ? `Hệ thống đang quá tải tạm thời. Vui lòng thử lại sau khoảng ${sec} giây.`
+                  : "Hệ thống đang quá tải tạm thời. Vui lòng thử lại sau ít phút.";
+              sseErrorInfo = { message: friendly, retryAfterSec: sec };
+              // Show banner immediately for better UX
+              setErrorNotice({ message: friendly, retryAfterSec: sec });
+              // Ensure assistant bubble shows a friendly message instead of AbortError
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMsg.id
+                    ? {
+                        ...m,
+                        content:
+                          m.content && m.content.trim().length > 0
+                            ? m.content
+                            : `> ${friendly}`,
+                      }
+                    : m
+                )
+              );
+              sseError = new Error(friendly);
               // abort the stream; we'll throw after the loop ends
               try {
                 ac.abort();
               } catch {}
             } catch {
-              sseError = new Error("Lỗi không xác định khi xử lý phản hồi.");
+              const friendly = "Đã xảy ra lỗi khi xử lý phản hồi. Vui lòng thử lại.";
+              sseErrorInfo = { message: friendly };
+              setErrorNotice({ message: friendly });
+              sseError = new Error(friendly);
               try {
                 ac.abort();
               } catch {}
@@ -638,7 +681,8 @@ const FeatureChat = () => {
             : m
         )
       );
-      throw e;
+      // Show friendly banner with Retry option, prefer parsed SSE error info
+      setErrorNotice((prev) => prev ?? (sseErrorInfo || { message: msg }));
     } finally {
       setIsStreaming(false);
       abortRef.current = null;
@@ -814,6 +858,24 @@ const FeatureChat = () => {
                 })}
                 <div ref={endRef} />
               </div>
+
+              {/* Error banner near input */}
+              {errorNotice ? (
+                <Alert variant="destructive">
+                  <AlertTitle>{errorNotice.title ?? "Xin lỗi, hệ thống đang bận"}</AlertTitle>
+                  <AlertDescription>
+                    {errorNotice.message}
+                  </AlertDescription>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Button onClick={retryLast} disabled={isStreaming}>
+                      Thử lại
+                    </Button>
+                    <Button variant="ghost" onClick={() => setErrorNotice(null)}>
+                      Đóng
+                    </Button>
+                  </div>
+                </Alert>
+              ) : null}
 
               <PromptInput
                 onSubmit={handleSend}
