@@ -8,20 +8,11 @@ import {
   useLocation,
 } from "react-router-dom";
 import { useEffect, useRef, useState, useMemo } from "react";
-import { Markdown } from "@/components/Markdown";
 import { normalizeUrlForMatch } from "@/lib/utils";
 // no slug needed; route is /t/{uuid}
 import { getChatSseUrl, getChatHistoryUrl } from "@/lib/api";
-import { Loader2, ChevronDown } from "lucide-react";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
-import { Card, CardContent } from "@/components/ui/card";
-import AttachmentList from "@/components/AttachmentList";
+import ChatMessage from "@/components/ChatMessage";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 type ChatMedia = {
   src: string;
@@ -31,7 +22,7 @@ type ChatMedia = {
 
 type ChatMessage = {
   id: string;
-  role: "user" | "assistant" | "system" | "tool";
+  role: "user" | "assistant" | "system" | "tool" | "thinking";
   content: string;
   media?: ChatMedia[];
   toolName?: string;
@@ -104,6 +95,14 @@ const FeatureChat = () => {
   const [sourceExpanded, setSourceExpanded] = useState<Record<string, boolean>>(
     {}
   );
+  const [thinkingExpanded, setThinkingExpanded] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [overlayHeight, setOverlayHeight] = useState<number>(120);
+  const [errorNotice, setErrorNotice] = useState<
+    { title?: string; message: string; retryAfterSec?: number } | null
+  >(null);
+  const lastAttemptRef = useRef<{ value: string; files?: File[] } | null>(null);
 
   const normalizeBase64 = (input: string): string => {
     let out = input.replace(/-/g, "+").replace(/_/g, "/");
@@ -276,6 +275,13 @@ const FeatureChat = () => {
                 }
               }
             }
+            if (content.trim().length === 0) {
+              // Skip purely empty text prompts, but still render attachments-only prompts
+              if (media.length === 0) {
+                idx += 1;
+                continue;
+              }
+            }
             mapped.push({
               id,
               role: "user",
@@ -286,6 +292,10 @@ const FeatureChat = () => {
             const content =
               typeof part?.content === "string" ? part.content : "";
             mapped.push({ id, role: "assistant", content });
+          } else if (partKind === "thinking") {
+            const content =
+              typeof part?.content === "string" ? part.content : "";
+            mapped.push({ id, role: "thinking", content });
           } else {
             // ignore other parts (e.g., tool-call, other tools) for UI
           }
@@ -346,8 +356,20 @@ const FeatureChat = () => {
 
   const abortRef = useRef<AbortController | null>(null);
 
+  const retryLast = async () => {
+    if (isStreaming) return;
+    const last = lastAttemptRef.current;
+    if (!last) return;
+    setErrorNotice(null);
+    await handleSend(last.value, last.files);
+  };
+
   const handleSend = async (value: string, files?: File[]) => {
     if (isStreaming) return;
+    // Remember last attempt for Retry
+    lastAttemptRef.current = { value, files };
+    // Clear any previous error banner when starting a new attempt
+    setErrorNotice(null);
     // Auto-collapse all source cards except the latest one when user sends a new message
     const toolIds = messagesRef.current
       .filter(
@@ -376,6 +398,7 @@ const FeatureChat = () => {
     abortRef.current = ac;
     setIsStreaming(true);
 
+    let sseErrorInfo: { message: string; retryAfterSec?: number } | null = null;
     try {
       const extractUuidFromThreadId = (raw?: string): string | undefined => {
         if (!raw) return undefined;
@@ -558,18 +581,43 @@ const FeatureChat = () => {
             handleToolResults(map[eventName as keyof typeof map], dataStr);
           } else if (eventName === "error") {
             try {
-              const err = JSON.parse(dataStr);
-              const msg =
-                err?.error && typeof err.error === "string"
-                  ? err.error
-                  : "Không xác định";
-              sseError = new Error(msg);
+              const err = JSON.parse(dataStr) as any;
+              const detailsStr =
+                typeof err?.details === "string" ? (err.details as string) : "";
+              // Try to extract retry delay from provider details, e.g. "retryDelay': '55s'"
+              const m = detailsStr.match(/retryDelay['\"]?\s*:\s*['\"](?<sec>\d+)s['\"]/);
+              const sec = m && m.groups && m.groups.sec ? Number(m.groups.sec) : undefined;
+              const friendly =
+                typeof sec === "number"
+                  ? `Hệ thống đang quá tải tạm thời. Vui lòng thử lại sau khoảng ${sec} giây.`
+                  : "Hệ thống đang quá tải tạm thời. Vui lòng thử lại sau ít phút.";
+              sseErrorInfo = { message: friendly, retryAfterSec: sec };
+              // Show banner immediately for better UX
+              setErrorNotice({ message: friendly, retryAfterSec: sec });
+              // Ensure assistant bubble shows a friendly message instead of AbortError
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === assistantMsg.id
+                    ? {
+                        ...m,
+                        content:
+                          m.content && m.content.trim().length > 0
+                            ? m.content
+                            : `> ${friendly}`,
+                      }
+                    : m
+                )
+              );
+              sseError = new Error(friendly);
               // abort the stream; we'll throw after the loop ends
               try {
                 ac.abort();
               } catch {}
             } catch {
-              sseError = new Error("Lỗi không xác định khi xử lý phản hồi.");
+              const friendly = "Đã xảy ra lỗi khi xử lý phản hồi. Vui lòng thử lại.";
+              sseErrorInfo = { message: friendly };
+              setErrorNotice({ message: friendly });
+              sseError = new Error(friendly);
               try {
                 ac.abort();
               } catch {}
@@ -622,54 +670,15 @@ const FeatureChat = () => {
             : m
         )
       );
-      throw e;
+      // Show friendly banner with Retry option, prefer parsed SSE error info
+      setErrorNotice((prev) => prev ?? (sseErrorInfo || { message: msg }));
     } finally {
       setIsStreaming(false);
       abortRef.current = null;
     }
   };
 
-  const SourceCard = ({ item, index }: { item: any; index: number }) => {
-    const title: string = item?.title ?? item?.url ?? "Nguồn";
-    const url: string = item?.url ?? "";
-    let host: string =
-      item?.meta_url?.hostname || item?.profile?.long_name || "";
-    const favicon: string =
-      item?.meta_url?.favicon || item?.profile?.img || "/favicon.ico";
-    if (!host && typeof url === "string" && url) {
-      try {
-        host = new URL(url).hostname;
-      } catch {
-        // ignore invalid URL
-      }
-    }
-    return (
-      <Card className="h-full">
-        <CardContent className="p-4 flex items-start gap-3">
-          <div className="flex items-center justify-center h-6 w-6 rounded-full bg-secondary text-xs">
-            {index + 1}
-          </div>
-          <div className="flex-1 overflow-hidden">
-            <a
-              href={url}
-              target="_blank"
-              rel="noreferrer"
-              className="line-clamp-2 text-sm hover:underline"
-            >
-              {title}
-            </a>
-            <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-              {favicon ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={favicon} alt="icon" className="h-4 w-4 rounded-sm" />
-              ) : null}
-              <span className="truncate">{host}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
+  // SourceCard moved to a shared component
 
   return (
     <div className="min-h-screen flex w-full overflow-hidden">
@@ -686,120 +695,68 @@ const FeatureChat = () => {
             </div>
           </header>
 
-          <section className="max-w-3xl mx-auto pb-40">
+          <section
+            className="max-w-3xl mx-auto"
+            style={{ paddingBottom: Math.max(overlayHeight + 16, 64) }}
+          >
             <div className="flex flex-col gap-4 mt-6">
               {/* Messages */}
               <div className="space-y-3">
                 {messages.map((m) => {
-                  if (
+                  const isTool =
                     m.role === "tool" &&
                     (m.toolName === "search_web" ||
-                      m.toolName === "fetch_url_content")
-                  ) {
-                    const results = Array.isArray(m.results) ? m.results : [];
-                    const isOpen = !!sourceExpanded[m.id];
-                    return (
-                      <div key={m.id} className="flex justify-start">
-                        <div className="max-w-[80%] w-full">
-                          <div className="rounded-lg border bg-muted/30 p-3">
-                            <button
-                              type="button"
-                              className="flex w-full items-center justify-between hover:opacity-80"
-                              onClick={() =>
-                                setSourceExpanded((prev) => ({
-                                  ...prev,
-                                  [m.id]: !isOpen,
-                                }))
-                              }
-                              aria-expanded={isOpen}
-                              aria-controls={`sources-${m.id}`}
-                            >
-                              <div className="text-sm font-medium text-muted-foreground">
-                                {results.length} nguồn
-                              </div>
-                              <ChevronDown
-                                className={`size-4 transition-transform ${
-                                  isOpen ? "rotate-180" : "rotate-0"
-                                }`}
-                              />
-                            </button>
-                            {isOpen ? (
-                              <div
-                                id={`sources-${m.id}`}
-                                className="relative mt-3"
-                              >
-                                <Carousel
-                                  opts={{ align: "start" }}
-                                  className="w-full"
-                                >
-                                  <CarouselContent>
-                                    {results.map((it, idx) => (
-                                      <CarouselItem
-                                        key={idx}
-                                        className="basis-full sm:basis-1/2 lg:basis-1/3"
-                                      >
-                                        <SourceCard item={it} index={idx} />
-                                      </CarouselItem>
-                                    ))}
-                                  </CarouselContent>
-                                  <CarouselPrevious className="-left-5" />
-                                  <CarouselNext className="-right-5" />
-                                </Carousel>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-
+                      m.toolName === "fetch_url_content");
+                  const isThinking = m.role === "thinking";
+                  const expanded = isTool
+                    ? !!sourceExpanded[m.id]
+                    : isThinking
+                    ? (thinkingExpanded[m.id] ?? true)
+                    : undefined;
+                  const onToggleExpanded = isTool
+                    ? (next: boolean) =>
+                        setSourceExpanded((prev) => ({ ...prev, [m.id]: next }))
+                    : isThinking
+                    ? (next: boolean) =>
+                        setThinkingExpanded((prev) => ({ ...prev, [m.id]: next }))
+                    : undefined;
                   return (
-                    <div
+                    <ChatMessage
                       key={m.id}
-                      className={
-                        m.role === "user"
-                          ? "flex justify-end"
-                          : "flex justify-start"
-                      }
-                    >
-                      <div
-                        className={
-                          "max-w-[80%] rounded-2xl px-4 py-2 text-sm " +
-                          (m.role === "user"
-                            ? "bg-emerald-600 text-white"
-                            : "bg-card border")
-                        }
-                      >
-                        {m.role === "assistant" ? (
-                          m.content.trim().length === 0 ? (
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Loader2 className="size-4 animate-spin" />
-                              <span>Để xem...</span>
-                            </div>
-                          ) : (
-                            <Markdown content={m.content} linkMeta={linkMeta} />
-                          )
-                        ) : (
-                          <>
-                            {Array.isArray(m.media) && m.media.length > 0 ? (
-                              <AttachmentList
-                                media={m.media}
-                                variant={
-                                  m.role === "user" ? "onAccent" : "default"
-                                }
-                              />
-                            ) : null}
-                            <div>{m.content}</div>
-                          </>
-                        )}
-                      </div>
-                    </div>
+                      message={m}
+                      linkMeta={linkMeta}
+                      expanded={expanded}
+                      onToggleExpanded={onToggleExpanded}
+                    />
                   );
                 })}
                 <div ref={endRef} />
               </div>
 
-              <PromptInput onSubmit={handleSend} fixed disabled={isStreaming} />
+              {/* Error banner near input */}
+              {errorNotice ? (
+                <Alert variant="destructive">
+                  <AlertTitle>{errorNotice.title ?? "Xin lỗi, hệ thống đang bận"}</AlertTitle>
+                  <AlertDescription>
+                    {errorNotice.message}
+                  </AlertDescription>
+                  <div className="mt-3 flex items-center gap-2">
+                    <Button onClick={retryLast} disabled={isStreaming}>
+                      Thử lại
+                    </Button>
+                    <Button variant="ghost" onClick={() => setErrorNotice(null)}>
+                      Đóng
+                    </Button>
+                  </div>
+                </Alert>
+              ) : null}
+
+              <PromptInput
+                onSubmit={handleSend}
+                fixed
+                disabled={isStreaming}
+                onOverlayHeightChange={(h) => setOverlayHeight(h)}
+              />
             </div>
           </section>
         </main>

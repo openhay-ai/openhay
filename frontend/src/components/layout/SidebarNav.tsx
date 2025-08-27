@@ -1,4 +1,4 @@
-import { Home, HelpCircle, MapPin, GraduationCap, PenLine, Languages, Zap, Brain, History, Smartphone, Flame, School, CircleHelp } from "lucide-react";
+import { Home, HelpCircle, MapPin, GraduationCap, PenLine, Languages, Zap, Brain, History, Smartphone, Flame, School, CircleHelp, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo-aihay.png";
 import { Link, useLocation } from "react-router-dom";
@@ -9,17 +9,18 @@ interface Item {
 }
 
 const primaryItems: Array<Item & { to?: string }> = [
-  { label: "AI Tìm kiếm", icon: Home, to: "/" },
-  { label: "Giải bài tập", icon: GraduationCap, to: "/?type=homework" },
-  { label: "AI Viết văn", icon: PenLine, to: "/?type=writing" },
-  { label: "Dịch", icon: Languages, to: "/?type=translate" },
-  { label: "Tóm tắt", icon: Zap, to: "/?type=summary" },
-  { label: "Mindmap", icon: Brain, to: "/?type=mindmap" },
+  { label: "Hỏi đáp AI", icon: Home, to: "/" },
+  { label: "Nghiên cứu chuyên sâu", icon: Search, to: "/research" },
+  { label: "Gỡ rối bài tập", icon: GraduationCap, to: "/?type=homework" },
+  { label: "Chắp bút cùng AI", icon: PenLine, to: "/?type=writing" },
+  { label: "AI Dịch thuật", icon: Languages, to: "/?type=translate" },
+  { label: "Tóm tắt thần tốc", icon: Zap, to: "/?type=summary" },
+  { label: "Tạo Mindmap AI", icon: Brain, to: "/?type=mindmap" },
   { label: "Lịch sử", icon: History, to: "/history" },
 ];
 
 const secondaryItems: Item[] = [
-  { label: "Trợ giúp", icon: CircleHelp },
+  { label: "Hỗ trợ", icon: CircleHelp },
 ];
 
 export const SidebarNav = () => {

@@ -21,4 +21,6 @@ export function getFeaturedUrl(): string {
   return `${getApiBaseUrl()}/api/featured`;
 }
 
-
+export function getResearchSseUrl(): string {
+  return `${getApiBaseUrl()}/api/research`;
+}

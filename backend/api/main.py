@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+
 import logfire
 from backend.api.routers.chat import router as chat_router
 from backend.api.routers.featured import router as featured_router
 from backend.api.routers.health import router as health_router
+from backend.api.routers.research import router as research_router
+from backend.db import async_engine
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 
 def _get_cors_origins() -> list[str]:
@@ -21,9 +26,20 @@ def _get_cors_origins() -> list[str]:
     ]
 
 
-app = FastAPI(title="Open AI Hay API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Verify DB connectivity on startup; dispose engine on shutdown
+    async with async_engine.connect() as conn:
+        await conn.execute(text("SELECT 1"))
+    try:
+        yield
+    finally:
+        await async_engine.dispose()
 
-logfire.configure()
+
+app = FastAPI(title="Open AI Hay API", lifespan=lifespan)
+
+logfire.configure(scrubbing=False)
 logfire.instrument_fastapi(app)
 
 
@@ -38,6 +54,7 @@ app.add_middleware(
 app.include_router(health_router)
 app.include_router(chat_router)
 app.include_router(featured_router)
+app.include_router(research_router)
 
 
 # Convenience for `uvicorn backend.api.main:app --reload`

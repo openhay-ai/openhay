@@ -46,3 +46,11 @@ class ResearchDeps:
     current_datetime: str = field(
         default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S %Z")
     )
+
+    def as_json(self) -> dict:
+        # Minimal helper; expand if we later persist deps
+        return {
+            "plan_id": self.plan_id,
+            "plan": self.plan,
+            "current_datetime": self.current_datetime,
+        }
