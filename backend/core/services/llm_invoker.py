@@ -67,7 +67,7 @@ class LLMInvoker:
 
     async def acquire(self) -> None:
         """Acquire the RPM limiter once (useful for pre-stream throttling)."""
-        limiter = _get_limiter_for_model(settings.model_name)
+        limiter = _get_limiter_for_model(settings.model.model_name)
         await limiter.acquire()
 
     async def run(
@@ -81,13 +81,13 @@ class LLMInvoker:
 
         The operation_factory must return a fresh awaitable per attempt.
         """
-        limiter = _get_limiter_for_model(settings.model_name)
+        limiter = _get_limiter_for_model(settings.model.model_name)
 
         if not retry or max_attempts <= 1:
             await limiter.acquire()
             return await operation_factory()
 
-        provider, _ = _resolve_provider_and_model(settings.model_name)
+        provider, _ = _resolve_provider_and_model(settings.model.model_name)
         wait_fn = wait_llm_retry(provider)
         retry_fn = retry_predicate_for_provider(provider)
         return await run_with_quota_and_retry(

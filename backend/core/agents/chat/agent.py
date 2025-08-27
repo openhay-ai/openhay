@@ -1,7 +1,7 @@
 import logfire
 from backend.core.agents.chat.deps import ChatDeps
 from backend.core.agents.chat.prompts import system_prompt
-from backend.core.tools.search import search, fetch_url
+from backend.core.tools.search import fetch_url, search
 from backend.settings import settings
 from loguru import logger
 from pydantic_ai import Agent, RunContext
@@ -13,7 +13,7 @@ logfire.instrument_pydantic_ai()
 
 
 chat_agent = Agent(
-    settings.model_name,
+    settings.model,
     deps_type=ChatDeps,
     output_type=str,
 )

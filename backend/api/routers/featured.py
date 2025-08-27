@@ -17,12 +17,13 @@ from fastapi import APIRouter, BackgroundTasks
 from loguru import logger
 from pydantic import BaseModel, Field, HttpUrl
 from pydantic_ai import Agent
+from sqlalchemy import text
 
 router = APIRouter(prefix="/api/featured", tags=["featured"])
 
 
 class FeaturedItem(BaseModel):
-    title: str = Field(description="Title of the article, keep it short, within 10 words.")
+    title: str = Field(description=("Title of the article, keep it short, within 10 words."))
     url: HttpUrl
     image_url: Optional[HttpUrl] = None
     summary: str
@@ -32,7 +33,7 @@ class FeaturedItem(BaseModel):
 
 # Agent to extract top articles from crawled pages
 news_agent = Agent(
-    settings.model_name,
+    settings.model,
     output_type=list[FeaturedItem],
     system_prompt=(
         "You are a news curator for Vietnam.\n"
@@ -60,25 +61,66 @@ async def get_today_featured(
 
         existing_today = await sug_repo.list_for_day(today)
 
-        # Decide which day to use for response and
-        # whether to kick off background generation
+        # Decide which day to use for response and whether to kick off/wait
         if existing_today:
             cnt = len(existing_today)
             msg = f"Found {cnt} existing featured items for {today}"
             logger.info(msg)
             use_suggestions = existing_today
         else:
-            # After 6am local time, start generating today's featured
             cutoff = now.replace(hour=6, minute=0, second=0, microsecond=0)
             if now >= cutoff:
-                background_tasks.add_task(generate_today_featured, today)
+                # Distributed single-flight using Postgres advisory lock
+                lock_key = f"featured:{today.isoformat()}"
+                async with AsyncSessionLocal() as lock_session:
+                    async with lock_session.bind.connect() as conn:
+                        res = await conn.execute(
+                            text("SELECT pg_try_advisory_lock(hashtext(:k)::bigint)"),
+                            {"k": lock_key},
+                        )
+                        acquired = bool(res.scalar())
 
-            # Always return yesterday's featured if today's is not ready
-            yesterday_featured = await sug_repo.list_for_day(yesterday)
-            cnt = len(yesterday_featured)
-            msg = f"Returning {cnt} featured items for {yesterday}"
-            logger.info(msg)
-            use_suggestions = yesterday_featured
+                        if acquired:
+                            logger.info(
+                                "Acquired lock, generating featured for %s",
+                                today,
+                            )
+                            try:
+                                await generate_today_featured(today)
+                            finally:
+                                await conn.execute(
+                                    text("SELECT pg_advisory_unlock(hashtext(:k)::bigint)"),
+                                    {"k": lock_key},
+                                )
+                            use_suggestions = await sug_repo.list_for_day(today)
+                            cnt = len(use_suggestions)
+                            logger.info(
+                                "Returning %d items for %s",
+                                cnt,
+                                today,
+                            )
+                        else:
+                            logger.info(
+                                "Worker generating for %s; waiting...",
+                                today,
+                            )
+
+                            # Fallback to yesterday if not ready in time
+                            yesterday_featured = await sug_repo.list_for_day(yesterday)
+                            cnt = len(yesterday_featured)
+                            logger.info(
+                                "Timeout; returning %d items for %s",
+                                cnt,
+                                yesterday,
+                            )
+                            use_suggestions = yesterday_featured
+            else:
+                # Before cutoff, do not generate yet; use yesterday's
+                yesterday_featured = await sug_repo.list_for_day(yesterday)
+                cnt = len(yesterday_featured)
+                msg = f"Returning {cnt} featured items for {yesterday}"
+                logger.info(msg)
+                use_suggestions = yesterday_featured
 
         # Join with articles by explicit IDs to avoid filtering by fetched_at
         article_ids = [s.article_id for s in use_suggestions]

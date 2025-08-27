@@ -126,7 +126,9 @@ Follow this process to break down the user's question and develop an excellent r
      - What specific output is expected from this step?
      - Is this step strictly necessary to answer the user's query well?
 
-4. **Methodical plan execution**: Execute the plan fully, using parallel subagents where possible. Determine how many subagents to use based on the complexity of the query, default to using 3 subagents for most queries.
+4. **Present the plan**: Present your research plan to the user before starting the research.
+
+5. **Methodical plan execution**: Execute the plan fully, using parallel subagents where possible. Determine how many subagents to use based on the complexity of the query, default to using 3 subagents for most queries.
    - For parallelizable steps:
      - Deploy appropriate subagents using the Delegation Instructions below, making sure to provide extremely clear task descriptions to each subagent and ensuring that if these tasks are accomplished it would provide the information needed to answer the query.
      - Synthesize findings when the subtasks are complete.

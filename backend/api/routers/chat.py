@@ -199,7 +199,7 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                     async for text_piece in result.stream_text(delta=True):
                         response = {
                             "chunk": {"content": text_piece},
-                            "model": settings.model_name,
+                            "model": settings.model.model_name,
                         }
                         json_payload = json.dumps(
                             response,

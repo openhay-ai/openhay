@@ -7,8 +7,8 @@ from backend.core.agents.research.prompts import (
 )
 from backend.core.services.llm_invoker import llm_invoker
 from backend.core.services.web_discovery import WebDiscovery
+from backend.settings import settings
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
 from pydantic_ai.toolsets import FunctionToolset
 
 
@@ -78,16 +78,9 @@ async def complete_task(report: str) -> str:
 base_toolset = FunctionToolset(tools=[web_search, web_fetch])
 
 
-subagent_model = GoogleModel("gemini-2.5-flash")
-subagent_settings = GoogleModelSettings(
-    google_thinking_config={
-        "thinking_budget": 2048,
-        "include_thoughts": True,
-    }
-)
+subagent_model = settings.subagent_research_model
 subagent = Agent(
     subagent_model,
-    model_settings=subagent_settings,
     toolsets=[base_toolset],
     output_type=str,
     name="subagent",
@@ -148,16 +141,9 @@ async def run_parallel_subagents(
     return await asyncio.gather(*[_one(p) for p in prompts])
 
 
-lead_research_model = GoogleModel("gemini-2.5-pro")
-lead_research_settings = GoogleModelSettings(
-    google_thinking_config={
-        "thinking_budget": 8096,
-        "include_thoughts": True,
-    }
-)
+lead_research_model = settings.lead_research_model
 lead_research_agent = Agent(
     lead_research_model,
-    model_settings=lead_research_settings,
     # Do not attach function tools here; we'll provide deferred tools
     # at runtime in the router
     output_type=str,
