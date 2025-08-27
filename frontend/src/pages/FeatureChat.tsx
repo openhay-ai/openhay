@@ -8,22 +8,11 @@ import {
   useLocation,
 } from "react-router-dom";
 import { useEffect, useRef, useState, useMemo } from "react";
-import { Markdown } from "@/components/Markdown";
 import { normalizeUrlForMatch } from "@/lib/utils";
 // no slug needed; route is /t/{uuid}
 import { getChatSseUrl, getChatHistoryUrl } from "@/lib/api";
-import { Loader2, ChevronDown } from "lucide-react";
+import ChatMessage from "@/components/ChatMessage";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
-import { Card, CardContent } from "@/components/ui/card";
-import SourceCard from "@/components/SourceCard";
-import AttachmentList from "@/components/AttachmentList";
 
 type ChatMedia = {
   src: string;
@@ -714,146 +703,31 @@ const FeatureChat = () => {
               {/* Messages */}
               <div className="space-y-3">
                 {messages.map((m) => {
-                  if (m.role === "thinking") {
-                    const isOpen = thinkingExpanded[m.id] ?? true;
-                    return (
-                      <div key={m.id} className="flex justify-start">
-                        <div className="max-w-[80%] w-full">
-                          <div className="rounded-lg border bg-muted/30 p-3">
-                            <button
-                              type="button"
-                              className="flex w-full items-center justify-between hover:opacity-80"
-                              onClick={() =>
-                                setThinkingExpanded((prev) => ({
-                                  ...prev,
-                                  [m.id]: !isOpen,
-                                }))
-                              }
-                              aria-expanded={isOpen}
-                              aria-controls={`think-${m.id}`}
-                            >
-                              <div className="text-sm font-medium text-muted-foreground">
-                                Tư duy
-                              </div>
-                              <ChevronDown
-                                className={`size-4 transition-transform ${
-                                  isOpen ? "rotate-180" : "rotate-0"
-                                }`}
-                              />
-                            </button>
-                            {isOpen ? (
-                              <div id={`think-${m.id}`} className="mt-2 text-sm">
-                                <Markdown content={m.content} />
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-                  if (
+                  const isTool =
                     m.role === "tool" &&
                     (m.toolName === "search_web" ||
-                      m.toolName === "fetch_url_content")
-                  ) {
-                    const results = Array.isArray(m.results) ? m.results : [];
-                    const isOpen = !!sourceExpanded[m.id];
-                    return (
-                      <div key={m.id} className="flex justify-start">
-                        <div className="max-w-[80%] w-full">
-                          <div className="rounded-lg border bg-muted/30 p-3">
-                            <button
-                              type="button"
-                              className="flex w-full items-center justify-between hover:opacity-80"
-                              onClick={() =>
-                                setSourceExpanded((prev) => ({
-                                  ...prev,
-                                  [m.id]: !isOpen,
-                                }))
-                              }
-                              aria-expanded={isOpen}
-                              aria-controls={`sources-${m.id}`}
-                            >
-                              <div className="text-sm font-medium text-muted-foreground">
-                                {results.length} nguồn
-                              </div>
-                              <ChevronDown
-                                className={`size-4 transition-transform ${
-                                  isOpen ? "rotate-180" : "rotate-0"
-                                }`}
-                              />
-                            </button>
-                            {isOpen ? (
-                              <div
-                                id={`sources-${m.id}`}
-                                className="relative mt-3"
-                              >
-                                <Carousel
-                                  opts={{ align: "start" }}
-                                  className="w-full"
-                                >
-                                  <CarouselContent>
-                                    {results.map((it, idx) => (
-                                      <CarouselItem
-                                        key={idx}
-                                        className="basis-full sm:basis-1/2 lg:basis-1/3"
-                                      >
-                                        <SourceCard item={it} index={idx} />
-                                      </CarouselItem>
-                                    ))}
-                                  </CarouselContent>
-                                  <CarouselPrevious className="-left-5" />
-                                  <CarouselNext className="-right-5" />
-                                </Carousel>
-                              </div>
-                            ) : null}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-
+                      m.toolName === "fetch_url_content");
+                  const isThinking = m.role === "thinking";
+                  const expanded = isTool
+                    ? !!sourceExpanded[m.id]
+                    : isThinking
+                    ? (thinkingExpanded[m.id] ?? true)
+                    : undefined;
+                  const onToggleExpanded = isTool
+                    ? (next: boolean) =>
+                        setSourceExpanded((prev) => ({ ...prev, [m.id]: next }))
+                    : isThinking
+                    ? (next: boolean) =>
+                        setThinkingExpanded((prev) => ({ ...prev, [m.id]: next }))
+                    : undefined;
                   return (
-                    <div
+                    <ChatMessage
                       key={m.id}
-                      className={
-                        m.role === "user"
-                          ? "flex justify-end"
-                          : "flex justify-start"
-                      }
-                    >
-                      <div
-                        className={
-                          "max-w-[80%] rounded-2xl px-4 py-2 text-sm " +
-                          (m.role === "user"
-                            ? "bg-emerald-600 text-white"
-                            : "bg-card border")
-                        }
-                      >
-                        {m.role === "assistant" ? (
-                          m.content.trim().length === 0 ? (
-                            <div className="flex items-center gap-2 text-muted-foreground">
-                              <Loader2 className="size-4 animate-spin" />
-                              <span>Để xem...</span>
-                            </div>
-                          ) : (
-                            <Markdown content={m.content} linkMeta={linkMeta} />
-                          )
-                        ) : (
-                          <>
-                            {Array.isArray(m.media) && m.media.length > 0 ? (
-                              <AttachmentList
-                                media={m.media}
-                                variant={
-                                  m.role === "user" ? "onAccent" : "default"
-                                }
-                              />
-                            ) : null}
-                            <div>{m.content}</div>
-                          </>
-                        )}
-                      </div>
-                    </div>
+                      message={m}
+                      linkMeta={linkMeta}
+                      expanded={expanded}
+                      onToggleExpanded={onToggleExpanded}
+                    />
                   );
                 })}
                 <div ref={endRef} />

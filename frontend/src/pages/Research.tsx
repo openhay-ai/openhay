@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getResearchSseUrl } from "@/lib/api";
 import SourceCard from "@/components/SourceCard";
 import { normalizeUrlForMatch } from "@/lib/utils";
+import ChatMessage from "@/components/ChatMessage";
 
 type ThinkingEntry = { id: string; content: string; open: boolean; ts: number };
 
@@ -239,35 +240,7 @@ const Research = () => {
     );
   };
 
-  const ThinkingItem = ({ entry }: { entry: ThinkingEntry }) => {
-    return (
-      <div className="flex justify-start">
-        <div className="max-w-[80%] w-full">
-          <div className="rounded-lg border bg-muted/30 p-3">
-            <button
-              type="button"
-              className="flex w-full items-center justify-between hover:opacity-80"
-              onClick={() =>
-                setThinkingEntries((prev) =>
-                  prev.map((t) => (t.id === entry.id ? { ...t, open: !t.open } : t))
-                )
-              }
-              aria-expanded={entry.open}
-              aria-controls={`think-${entry.id}`}
-            >
-              <div className="text-sm font-medium text-muted-foreground">Tư duy</div>
-              <ChevronDown className={`size-4 transition-transform ${entry.open ? "rotate-180" : "rotate-0"}`} />
-            </button>
-            {entry.open ? (
-              <div id={`think-${entry.id}`} className="mt-2 text-sm">
-                <Markdown content={entry.content} />
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    );
-  };
+  // ThinkingItem replaced by shared ChatMessage
 
   const queryEntries = useMemo(
     () => queryOrder.map((id) => queries[id]).filter(Boolean),
@@ -346,11 +319,9 @@ const Research = () => {
 
               {/* User message bubble */}
               {userMessage ? (
-                <div className="flex justify-end">
-                  <div className="max-w-[80%] rounded-2xl px-4 py-2 text-sm bg-emerald-600 text-white">
-                    {userMessage}
-                  </div>
-                </div>
+                <ChatMessage
+                  message={{ id: "user-msg", role: "user", content: userMessage }}
+                />
               ) : null}
 
               {/* Typing loader shown until first thinking arrives */}
@@ -367,7 +338,16 @@ const Research = () => {
 
               {/* Thinking boxes (appear before the timeline) */}
               {thinkingEntries.map((t) => (
-                <ThinkingItem key={t.id} entry={t} />
+                <ChatMessage
+                  key={t.id}
+                  message={{ id: t.id, role: "thinking", content: t.content }}
+                  expanded={t.open}
+                  onToggleExpanded={(next) =>
+                    setThinkingEntries((prev) =>
+                      prev.map((x) => (x.id === t.id ? { ...x, open: next } : x))
+                    )
+                  }
+                />
               ))}
 
               {/* Timeline */}
@@ -455,11 +435,10 @@ const Research = () => {
 
               {/* Final report as AI bubble */}
               {finalReport ? (
-                <div className="flex justify-start">
-                  <div className="max-w-[80%] rounded-2xl px-4 py-2 text-sm bg-card border">
-                    <Markdown content={finalReport} linkMeta={linkMeta} />
-                  </div>
-                </div>
+                <ChatMessage
+                  message={{ id: "final-report", role: "assistant", content: finalReport }}
+                  linkMeta={linkMeta}
+                />
               ) : null}
 
               {conversationId ? (
