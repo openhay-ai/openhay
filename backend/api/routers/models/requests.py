@@ -3,7 +3,7 @@ from __future__ import annotations
 from pydantic import Field
 
 from backend.core.mixins import ConversationMixin
-from backend.core.services.chat import BinaryContentIn
+from backend.core.services.base import BinaryContentIn
 
 
 class BaseTranslateRequest(ConversationMixin):

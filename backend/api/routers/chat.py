@@ -11,7 +11,8 @@ from backend.core.agents.chat.deps import ChatDeps
 from backend.core.mixins import ConversationMixin
 from backend.core.models import FeatureKey, FeaturePreset
 from backend.core.repositories.conversation import ConversationRepository
-from backend.core.services.chat import BinaryContentIn, ChatService
+from backend.core.services.base import BinaryContentIn
+from backend.core.services.chat import ChatService
 from backend.core.services.streaming import format_sse, stream_agent_text
 from backend.db import AsyncSessionLocal
 from fastapi import APIRouter, HTTPException
