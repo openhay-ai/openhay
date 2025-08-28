@@ -8,10 +8,9 @@ from backend.api.routers.models.requests import (
 )
 from backend.core.agents.translate.agent import translate_agent
 from backend.core.agents.translate.deps import TranslateDeps
-from backend.core.services.llm_invoker import llm_invoker
+from backend.core.services.streaming import format_sse, stream_agent_text
 from backend.core.services.translate import TranslateService
 from backend.db import AsyncSessionLocal
-from backend.settings import settings
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from loguru import logger
@@ -58,8 +57,7 @@ async def translate_url(payload: TranslateURLRequest) -> StreamingResponse:
 
                 if created_new_conversation:
                     evt_payload = {"conversation_id": str(conversation.id)}
-                    json_payload = json.dumps(evt_payload, ensure_ascii=False)
-                    yield f"event: conversation_created\ndata: {json_payload}\n\n"
+                    yield format_sse("conversation_created", evt_payload)
 
                 # Load past messages (optional for context)
                 message_history = await svc.load_message_history(conversation.id)
@@ -75,46 +73,39 @@ async def translate_url(payload: TranslateURLRequest) -> StreamingResponse:
                     return
 
                 # Build user prompt content
-                user_prompt = (
-                    f"Translate the following content from '{payload.source_lang}' into '{payload.target_lang}'."
-                    + "\n\n"
-                    + content_md
-                )
+                user_prompt = payload.message + "\n\n" + content_md
 
-                # Respect provider-specific RPM
-                await llm_invoker.acquire()
+                async def on_complete(result) -> list[str]:
+                    events: list[str] = []
+                    try:
+                        msgs = ModelMessagesTypeAdapter.validate_python(result.new_messages())
+                        jsonable_msgs = svc.to_jsonable_messages(msgs)
+                        await svc.persist_message_run(conversation, jsonable_msgs)
+                        try:
+                            await session.commit()
+                        except Exception:
+                            logger.exception("Failed to commit session after run persistence")
+                    except Exception:
+                        logger.exception("Failed to persist translation message run")
+                    return events
 
-                async with translate_agent.run_stream(
+                async for sse_message in stream_agent_text(
+                    translate_agent,
                     user_prompt,
                     deps=TranslateDeps(
                         target_lang=payload.target_lang, source_lang=payload.source_lang
                     ),
                     message_history=message_history,
-                ) as result:
-                    async for text_piece in result.stream_text(delta=True):
-                        response = {
-                            "chunk": {"content": text_piece},
-                            "model": settings.model.model_name,
-                        }
-                        json_payload = json.dumps(response, ensure_ascii=False)
-                        yield f"event: ai_message\ndata: {json_payload}\n\n"
-
-                    # Persist the run
-                    try:
-                        msgs = ModelMessagesTypeAdapter.validate_python(result.new_messages())
-                        jsonable_msgs = svc.to_jsonable_messages(msgs)
-                        await svc.persist_message_run(conversation, jsonable_msgs)
-                        await session.commit()
-                    except Exception:
-                        logger.exception("Failed to persist translation message run")
+                    on_complete=on_complete,
+                ):
+                    yield sse_message
         except Exception as exc:
             error_response = {
                 "error": "Translate URL execution error",
                 "error_type": type(exc).__name__,
                 "details": str(exc),
             }
-            json_payload = json.dumps(error_response, ensure_ascii=False)
-            yield f"event: error\ndata: {json_payload}\n\n"
+            yield format_sse("error", error_response)
 
     return StreamingResponse(
         stream_generator(),
@@ -158,8 +149,7 @@ async def translate_file(payload: TranslateFileRequest) -> StreamingResponse:
 
                 if created_new_conversation:
                     evt_payload = {"conversation_id": str(conversation.id)}
-                    json_payload = json.dumps(evt_payload, ensure_ascii=False)
-                    yield f"event: conversation_created\ndata: {json_payload}\n\n"
+                    yield format_sse("conversation_created", evt_payload)
 
                 message_history = await svc.load_message_history(conversation.id)
 
@@ -167,42 +157,41 @@ async def translate_file(payload: TranslateFileRequest) -> StreamingResponse:
                 safe_media = svc.decode_media_items(payload.media)
 
                 user_prompt = [
-                    f"Translate the following content from '{payload.source_lang}' into '{payload.target_lang}'.",
+                    payload.message,
                     *safe_media,
                 ]
 
-                await llm_invoker.acquire()
+                async def on_complete(result) -> list[str]:
+                    events: list[str] = []
+                    try:
+                        msgs = ModelMessagesTypeAdapter.validate_python(result.new_messages())
+                        jsonable_msgs = svc.to_jsonable_messages(msgs)
+                        await svc.persist_message_run(conversation, jsonable_msgs)
+                        try:
+                            await session.commit()
+                        except Exception:
+                            logger.exception("Failed to commit session after run persistence")
+                    except Exception:
+                        logger.exception("Failed to persist translation message run")
+                    return events
 
-                async with translate_agent.run_stream(
+                async for sse_message in stream_agent_text(
+                    translate_agent,
                     user_prompt,
                     deps=TranslateDeps(
                         target_lang=payload.target_lang, source_lang=payload.source_lang
                     ),
                     message_history=message_history,
-                ) as result:
-                    async for text_piece in result.stream_text(delta=True):
-                        response = {
-                            "chunk": {"content": text_piece},
-                            "model": settings.model.model_name,
-                        }
-                        json_payload = json.dumps(response, ensure_ascii=False)
-                        yield f"event: ai_message\ndata: {json_payload}\n\n"
-
-                    try:
-                        msgs = ModelMessagesTypeAdapter.validate_python(result.new_messages())
-                        jsonable_msgs = svc.to_jsonable_messages(msgs)
-                        await svc.persist_message_run(conversation, jsonable_msgs)
-                        await session.commit()
-                    except Exception:
-                        logger.exception("Failed to persist translation message run")
+                    on_complete=on_complete,
+                ):
+                    yield sse_message
         except Exception as exc:
             error_response = {
                 "error": "Translate File execution error",
                 "error_type": type(exc).__name__,
                 "details": str(exc),
             }
-            json_payload = json.dumps(error_response, ensure_ascii=False)
-            yield f"event: error\ndata: {json_payload}\n\n"
+            yield format_sse("error", error_response)
 
     return StreamingResponse(
         stream_generator(),

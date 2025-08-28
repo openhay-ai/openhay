@@ -9,6 +9,7 @@ from backend.core.services.chat import BinaryContentIn
 class BaseTranslateRequest(ConversationMixin):
     target_lang: str = "Vietnamese"
     source_lang: str = "English"
+    message: str = ""
 
 
 class TranslateURLRequest(BaseTranslateRequest):
