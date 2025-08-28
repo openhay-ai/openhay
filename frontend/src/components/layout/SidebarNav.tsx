@@ -1,23 +1,16 @@
 import { Home, HelpCircle, MapPin, GraduationCap, PenLine, Languages, Zap, Brain, History, Smartphone, Flame, School, CircleHelp, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo-aihay.png";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 interface Item {
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  to?: string;
+  onClick?: () => void;
 }
 
-const primaryItems: Array<Item & { to?: string }> = [
-  { label: "Hỏi đáp AI", icon: Home, to: "/" },
-  { label: "Nghiên cứu chuyên sâu", icon: Search, to: "/research" },
-  { label: "Gỡ rối bài tập", icon: GraduationCap, to: "/?type=homework" },
-  { label: "Chắp bút cùng AI", icon: PenLine, to: "/?type=writing" },
-  { label: "AI Dịch thuật", icon: Languages, to: "/?type=translate" },
-  { label: "Tóm tắt thần tốc", icon: Zap, to: "/?type=summary" },
-  { label: "Tạo Mindmap AI", icon: Brain, to: "/?type=mindmap" },
-  { label: "Lịch sử", icon: History, to: "/history" },
-];
+const primaryItems: Array<Item> = [];
 
 const secondaryItems: Item[] = [
   { label: "Hỗ trợ", icon: CircleHelp },
@@ -25,6 +18,19 @@ const secondaryItems: Item[] = [
 
 export const SidebarNav = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Build items here to access navigate for translate item
+  const items: Array<Item> = [
+    { label: "Hỏi đáp AI", icon: Home, to: "/" },
+    { label: "Nghiên cứu chuyên sâu", icon: Search, to: "/research" },
+    { label: "Gỡ rối bài tập", icon: GraduationCap, to: "/?type=homework" },
+    { label: "Chắp bút cùng AI", icon: PenLine, to: "/?type=writing" },
+    { label: "AI Dịch thuật", icon: Languages, to: "/translate" },
+    { label: "Tóm tắt thần tốc", icon: Zap, to: "/?type=summary" },
+    { label: "Tạo Mindmap AI", icon: Brain, to: "/?type=mindmap" },
+    { label: "Lịch sử", icon: History, to: "/history" },
+  ];
   return (
     <aside className="hidden md:flex fixed inset-y-0 left-0 w-64 flex-col border-r bg-sidebar text-sidebar-foreground z-10">
       <div className="flex items-center gap-1 px-4 py-4 border-b">
@@ -34,7 +40,7 @@ export const SidebarNav = () => {
 
       <nav className="flex-1 overflow-auto p-2">
         <ul className="space-y-1">
-          {primaryItems.map((item, idx) => {
+          {items.map((item, idx) => {
             const Icon = item.icon;
             const active = (() => {
               if (!item.to) return idx === 0;
@@ -71,20 +77,29 @@ export const SidebarNav = () => {
                     <Icon className="size-4" />
                     <span>{item.label}</span>
                   </Link>
-                ) : (
-                  <a
-                    href="#"
-                  className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
-                    active
-                      ? "bg-sidebar-accent text-sidebar-foreground"
-                      : "hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                  )}
-                  aria-current={active ? "page" : undefined}
+                ) : item.onClick ? (
+                  <button
+                    type="button"
+                    onClick={item.onClick}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm transition-colors",
+                      active
+                        ? "bg-sidebar-accent text-sidebar-foreground"
+                        : "hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                    )}
+                    aria-current={active ? "page" : undefined}
                   >
                     <Icon className="size-4" />
                     <span>{item.label}</span>
-                  </a>
+                  </button>
+                ) : (
+                  <span className={cn(
+                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm",
+                    active ? "bg-sidebar-accent text-sidebar-foreground" : undefined
+                  )}>
+                    <Icon className="size-4" />
+                    <span>{item.label}</span>
+                  </span>
                 )}
               </li>
             );
