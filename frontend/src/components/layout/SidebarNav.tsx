@@ -1,4 +1,4 @@
-import { Home, HelpCircle, MapPin, GraduationCap, PenLine, Languages, Zap, Brain, History, Smartphone, Flame, School, CircleHelp, Search } from "lucide-react";
+import { Languages, History, CircleHelp, Search, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo-aihay.png";
 import { Link, useLocation, useNavigate } from "react-router-dom";
@@ -22,13 +22,13 @@ export const SidebarNav = () => {
 
   // Build items here to access navigate for translate item
   const items: Array<Item> = [
-    { label: "Hỏi đáp AI", icon: Home, to: "/" },
-    { label: "Nghiên cứu chuyên sâu", icon: Search, to: "/research" },
-    { label: "Gỡ rối bài tập", icon: GraduationCap, to: "/?type=homework" },
-    { label: "Chắp bút cùng AI", icon: PenLine, to: "/?type=writing" },
+    { label: "AI Hỏi đáp", icon: Search, to: "/" },
+    { label: "Nghiên cứu chuyên sâu", icon: Sparkles, to: "/research" },
+    // { label: "Gỡ rối bài tập", icon: GraduationCap, to: "/?type=homework" },
+    // { label: "Chắp bút cùng AI", icon: PenLine, to: "/?type=writing" },
     { label: "AI Dịch thuật", icon: Languages, to: "/translate" },
-    { label: "Tóm tắt thần tốc", icon: Zap, to: "/?type=summary" },
-    { label: "Tạo Mindmap AI", icon: Brain, to: "/?type=mindmap" },
+    // { label: "Tóm tắt thần tốc", icon: Zap, to: "/?type=summary" },
+    // { label: "Tạo Mindmap AI", icon: Brain, to: "/?type=mindmap" },
     { label: "Lịch sử", icon: History, to: "/history" },
   ];
   return (
