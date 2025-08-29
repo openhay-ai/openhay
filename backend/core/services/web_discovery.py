@@ -10,6 +10,7 @@ import logfire
 from aiohttp import ClientSession
 from backend.settings import settings
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
+from crawl4ai.content_filter_strategy import PruningContentFilter
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from loguru import logger
 from pydantic import BaseModel
@@ -124,21 +125,47 @@ class WebDiscovery:
             # Update after any required wait to mark the time of this call
             self._last_brave_call_ts = monotonic()
 
-    async def crawl(self, urls: Iterable[str], timeout: int = 30) -> list[dict]:
+    @logfire.instrument("web_discovery.crawl")
+    async def crawl(
+        self,
+        urls: Iterable[str],
+        timeout: int = 30,
+        ignore_links: bool = True,
+        ignore_images: bool = False,
+        escape_html: bool = False,
+        pruned: bool = True,
+    ) -> list[dict]:
         """Crawl each URL and return extracted markdown + first image.
 
         Args:
             urls: List/iterable of URLs to crawl.
             timeout: Per-request timeout (seconds). Not used directly.
+            ignore_links: Whether to ignore links.
+            ignore_images: Whether to ignore images.
+            escape_html: Whether to escape HTML.
+            pruned: Whether to prune the content.
         Returns:
             A list of dicts with shape: {"url", "content", "image_url"}
         """
+        # Step 1: Create a pruning filter
+        if pruned:
+            logger.debug("Use pruning filter")
+            prune_filter = PruningContentFilter(
+                threshold=1.0,
+                threshold_type="dynamic",
+                min_word_threshold=10,
+            )
+        else:
+            logger.debug("Don't use pruning filter")
+            prune_filter = None
+
         md_generator = DefaultMarkdownGenerator(
             options={
-                "ignore_links": True,
-                "ignore_images": False,
-                "escape_html": False,
-            }
+                "ignore_links": ignore_links,
+                "ignore_images": ignore_images,
+                "escape_html": escape_html,
+            },
+            content_filter=prune_filter,
         )
         config = CrawlerRunConfig(
             markdown_generator=md_generator,
@@ -201,8 +228,22 @@ class WebDiscovery:
                     content: Optional[str] = None
                     image_url: Optional[str] = None
                     if crawl_result.success:
-                        content = str(crawl_result.markdown)
+                        raw_markdown = str(crawl_result.markdown.raw_markdown)
+                        fit_markdown = str(crawl_result.markdown.fit_markdown)
+                        content = (
+                            fit_markdown
+                            if len(fit_markdown.replace("\n", "").strip()) > 1
+                            else raw_markdown
+                        )
                         image_url = _extract_first_image_url(content, url)
+                        logfire.info(
+                            "Crawl success",
+                            url=url,
+                            image_url=image_url,
+                            content=content,
+                            fit_markdown=fit_markdown,
+                            raw_markdown=raw_markdown,
+                        )
                     else:
                         logfire.info("Crawl failed", url=url)
                 return {"url": url, "content": content, "image_url": image_url}

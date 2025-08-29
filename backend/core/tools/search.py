@@ -10,7 +10,13 @@ async def search(query: str, count: int = 5) -> list[SearchResult]:
 
 
 @logfire.instrument("fetch_url")
-async def fetch_url(urls: list[str]) -> list[dict]:
+async def fetch_url(
+    urls: list[str],
+    ignore_links: bool = True,
+    ignore_images: bool = False,
+    escape_html: bool = False,
+    pruned: bool = True,
+) -> list[dict]:
     """Fetch content directly from a list of URLs.
 
     Args:
@@ -20,7 +26,14 @@ async def fetch_url(urls: list[str]) -> list[dict]:
         List of dictionaries, each containing the URL, content (markdown), and image_url if found.
     """
     svc = WebDiscovery()
-    results = await svc.crawl(urls)
+    results = await svc.crawl(
+        urls,
+        ignore_links=ignore_links,
+        ignore_images=ignore_images,
+        escape_html=escape_html,
+        pruned=pruned,
+    )
+
     return results
 
 

@@ -24,3 +24,11 @@ export function getFeaturedUrl(): string {
 export function getResearchSseUrl(): string {
   return `${getApiBaseUrl()}/api/research`;
 }
+
+export function getTranslateUrlSseEndpoint(): string {
+  return `${getApiBaseUrl()}/api/translate/url`;
+}
+
+export function getTranslateFileSseEndpoint(): string {
+  return `${getApiBaseUrl()}/api/translate/file`;
+}

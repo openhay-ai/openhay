@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime
 from typing import Optional
 from uuid import UUID
@@ -12,10 +11,10 @@ from backend.core.agents.chat.deps import ChatDeps
 from backend.core.mixins import ConversationMixin
 from backend.core.models import FeatureKey, FeaturePreset
 from backend.core.repositories.conversation import ConversationRepository
-from backend.core.services.chat import BinaryContentIn, ChatService
-from backend.core.services.llm_invoker import llm_invoker
+from backend.core.services.base import BinaryContentIn
+from backend.core.services.chat import ChatService
+from backend.core.services.streaming import format_sse, stream_agent_text
 from backend.db import AsyncSessionLocal
-from backend.settings import settings
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from loguru import logger
@@ -59,18 +58,18 @@ async def list_conversations() -> dict[str, list[ConversationListItem]]:
 
         items: list[ConversationListItem] = []
 
-        # Build previews by scanning latest runs per conversation (best-effort)
+        # Build previews by scanning runs in chronological order (best-effort)
         for conv in conversations:
             preview: str | None = None
             try:
                 runs = await conversation_repo.list_message_runs(conv.id)
-                for run in reversed(runs):
+                for run in runs:
                     try:
                         objs = ModelMessagesTypeAdapter.validate_python(run.messages)
                     except Exception:
                         objs = []
-                    # find last user prompt in this run
-                    for msg in reversed(list(objs)):
+                    # find first user prompt in this run
+                    for msg in list(objs):
                         kind = (
                             msg.get("kind") if isinstance(msg, dict) else getattr(msg, "kind", None)
                         )
@@ -174,12 +173,7 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
 
                 if created_new_conversation:
                     evt_payload = {"conversation_id": str(conversation.id)}
-                    json_payload = json.dumps(
-                        evt_payload,
-                        ensure_ascii=False,
-                    )
-                    sse = f"event: conversation_created\ndata: {json_payload}\n\n"
-                    yield sse
+                    yield format_sse("conversation_created", evt_payload)
 
                 # Load message history
                 message_history = await chat_service.load_message_history(conversation.id)
@@ -188,28 +182,8 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                 safe_media = chat_service.decode_media_items(payload.media)
                 user_prompt = [payload.message, *safe_media]
 
-                # Respect provider-specific RPM before opening the stream
-                await llm_invoker.acquire()
-
-                async with chat_agent.run_stream(
-                    user_prompt,
-                    deps=ChatDeps(),
-                    message_history=message_history,
-                ) as result:
-                    async for text_piece in result.stream_text(delta=True):
-                        response = {
-                            "chunk": {"content": text_piece},
-                            "model": settings.model.model_name,
-                        }
-                        json_payload = json.dumps(
-                            response,
-                            ensure_ascii=False,
-                        )
-                        sse_message = f"event: ai_message\ndata: {json_payload}\n\n"
-                        logger.debug(f"SSE message: {sse_message[:100]}...")
-                        yield sse_message
-
-                    # Persist the run and emit search results
+                async def on_complete(result) -> list[str]:
+                    events: list[str] = []
                     try:
                         msgs = ModelMessagesTypeAdapter.validate_python(result.new_messages())
                         search_results = chat_service.extract_search_results(msgs, "search_web")
@@ -217,51 +191,37 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                             msgs, "fetch_url_content"
                         )
                         jsonable_msgs = chat_service.to_jsonable_messages(msgs)
-                        await chat_service.persist_message_run(
-                            conversation,
-                            jsonable_msgs,
-                        )
+                        await chat_service.persist_message_run(conversation, jsonable_msgs)
 
                         if search_results:
-                            evt_payload = {"results": search_results}
-                            evt_payload_json = json.dumps(
-                                evt_payload,
-                                ensure_ascii=False,
-                            )
-                            logger.debug(
-                                (f"SSE search_results message: {evt_payload_json[:100]}...")
-                            )
-                            yield (f"event: search_results\ndata: {evt_payload_json}\n\n")
-
+                            events.append(format_sse("search_results", {"results": search_results}))
                         if fetch_url_results:
-                            evt_payload = {"results": fetch_url_results}
-                            evt_payload_json = json.dumps(
-                                evt_payload,
-                                ensure_ascii=False,
+                            events.append(
+                                format_sse("fetch_url_results", {"results": fetch_url_results})
                             )
-                            logger.debug(
-                                (f"SSE fetch_url_results message: {evt_payload_json[:100]}...")
-                            )
-                            yield (f"event: fetch_url_results\ndata: {evt_payload_json}\n\n")
+                        try:
+                            await session.commit()
+                        except Exception:
+                            logger.exception("Failed to commit session after run persistence")
                     except Exception:
                         logger.exception("Failed to persist conversation message run")
+                    return events
 
-                    # Commit after run persistence
-                    try:
-                        await session.commit()
-                    except Exception:
-                        logger.exception("Failed to commit session after run persistence")
+                async for sse_message in stream_agent_text(
+                    chat_agent,
+                    user_prompt,
+                    deps=ChatDeps(),
+                    message_history=message_history,
+                    on_complete=on_complete,
+                ):
+                    yield sse_message
         except Exception as exc:
             error_response = {
                 "error": "Chat execution error",
                 "error_type": type(exc).__name__,
                 "details": str(exc),
             }
-            json_payload = json.dumps(
-                error_response,
-                ensure_ascii=False,
-            )
-            yield f"event: error\ndata: {json_payload}\n\n"
+            yield format_sse("error", error_response)
 
     return StreamingResponse(
         stream_generator(),

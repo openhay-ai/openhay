@@ -9,7 +9,8 @@ from backend.core.agents.research.agent import lead_research_agent, subagent
 from backend.core.agents.research.deps import ResearchDeps
 from backend.core.mixins import ConversationMixin
 from backend.core.models import Conversation
-from backend.core.services.chat import BinaryContentIn, ChatService
+from backend.core.services.base import BinaryContentIn
+from backend.core.services.chat import ChatService
 from backend.db import AsyncSessionLocal
 
 # settings not needed here

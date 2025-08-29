@@ -58,7 +58,7 @@ const History = () => {
                       navigate(`/t/${it.id}?${params.toString()}`);
                     }}
                   >
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium truncate">
                         {it.title || it.content_preview || "Không có tiêu đề"}
                       </div>
@@ -78,5 +78,3 @@ const History = () => {
 };
 
 export default History;
-
-

@@ -10,7 +10,7 @@ import {
 import { useEffect, useRef, useState, useMemo } from "react";
 import { normalizeUrlForMatch } from "@/lib/utils";
 // no slug needed; route is /t/{uuid}
-import { getChatSseUrl, getChatHistoryUrl } from "@/lib/api";
+import { getChatSseUrl, getChatHistoryUrl, getTranslateFileSseEndpoint, getTranslateUrlSseEndpoint } from "@/lib/api";
 import ChatMessage from "@/components/ChatMessage";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
@@ -56,7 +56,7 @@ const PRESET_DEFAULT_PARAMS: Record<string, Record<string, unknown>> = {
   default: {},
   homework: { show_steps: true },
   writing: { length: "medium", tone: "trung_lap" },
-  translate: { source_lang: "vi", target_lang: "en" },
+  translate: { source_lang: "Vietnamese", target_lang: "English" },
   summary: { bullet_count: 5 },
   mindmap: { max_depth: 3 },
 };
@@ -103,6 +103,7 @@ const FeatureChat = () => {
     { title?: string; message: string; retryAfterSec?: number } | null
   >(null);
   const lastAttemptRef = useRef<{ value: string; files?: File[] } | null>(null);
+  // const [showTranslate, setShowTranslate] = useState<boolean>(false);
 
   const normalizeBase64 = (input: string): string => {
     let out = input.replace(/-/g, "+").replace(/_/g, "/");
@@ -178,9 +179,17 @@ const FeatureChat = () => {
   useEffect(() => {
     const st = (location.state as any) || {};
     const preload = st.preloadMessages as ChatMessage[] | undefined;
+    const openTranslate = st.openTranslate as boolean | undefined;
+    const translateRun = st.translateRun as
+      | { kind: "link"; url: string; source_lang: string; target_lang: string; assistantId: string; message?: string }
+      | { kind: "file"; media: any[]; source_lang: string; target_lang: string; assistantId: string; message?: string }
+      | undefined;
     if (threadId && preload && preload.length > 0) {
       setMessages(preload);
       setSourceExpanded({});
+    }
+    if (!threadId && openTranslate) {
+      navigate("/translate", { replace: true });
     }
     // no separate preload for search results; they are embedded as tool messages now
 
@@ -189,7 +198,73 @@ const FeatureChat = () => {
       /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}/
     );
     const canonicalId = uuidMatch ? uuidMatch[0] : undefined;
-    if (!canonicalId) return;
+    if (!canonicalId) {
+      // Special case: immediate translate run without an id; start streaming into the assistant bubble
+      if (translateRun && Array.isArray(preload) && preload.length > 0) {
+        (async () => {
+          try {
+            if (abortRef.current) abortRef.current.abort();
+            const ac = new AbortController();
+            abortRef.current = ac;
+            setIsStreaming(true);
+            const endpoint = translateRun.kind === "link" ? getTranslateUrlSseEndpoint() : getTranslateFileSseEndpoint();
+            const message = translateRun.message;
+            const body = translateRun.kind === "link"
+              ? { url: translateRun.url, source_lang: translateRun.source_lang, target_lang: translateRun.target_lang, message }
+              : { media: (translateRun as any).media, source_lang: translateRun.source_lang, target_lang: translateRun.target_lang, message };
+            const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ac.signal });
+            if (!res.ok || !res.body) throw new Error(`Bad response: ${res.status}`);
+            const reader = res.body.getReader();
+            const decoder: any = new TextDecoder("utf-8");
+            let buffer = "";
+            let createdConversationId: string | null = null;
+            const commitChunk = (chunkContent: string) => {
+              setMessages((prev) => prev.map((m) => (m.id === translateRun.assistantId ? { ...m, content: m.content + chunkContent } : m)));
+            };
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              buffer += decoder.decode(value, { stream: true });
+              let idx: number;
+              // eslint-disable-next-line no-cond-assign
+              while ((idx = buffer.indexOf("\n\n")) !== -1) {
+                const rawEvent = buffer.slice(0, idx);
+                buffer = buffer.slice(idx + 2);
+                const lines = rawEvent.split(/\r?\n/);
+                let eventName = "message";
+                const dataLines: string[] = [];
+                for (const line of lines) {
+                  if (line.startsWith("event:")) eventName = line.slice(6).trim();
+                  else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+                }
+                const dataStr = dataLines.join("\n");
+                if (eventName === "ai_message") {
+                  try {
+                    const parsed = JSON.parse(dataStr) as { chunk?: { content?: string } };
+                    const chunk = parsed?.chunk?.content ?? "";
+                    if (chunk) commitChunk(chunk);
+                  } catch {}
+                } else if (eventName === "conversation_created") {
+                  try {
+                    const parsed = JSON.parse(dataStr) as { conversation_id?: string };
+                    if (parsed?.conversation_id) createdConversationId = parsed.conversation_id;
+                  } catch {}
+                }
+              }
+            }
+            if (createdConversationId) {
+              navigate(`/t/${createdConversationId}`, { replace: true, state: { preloadMessages: messagesRef.current } });
+            }
+          } catch {
+            // ignore for now
+          } finally {
+            setIsStreaming(false);
+            abortRef.current = null;
+          }
+        })();
+      }
+      return;
+    }
 
     (async () => {
       try {

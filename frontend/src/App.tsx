@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Root from "@/pages/Root";
 import FeatureChat from "@/pages/FeatureChat";
 import Research from "@/pages/Research";
+import Translate from "@/pages/Translate";
 import History from "@/pages/History";
 import NotFound from "@/pages/NotFound";
 
@@ -23,6 +24,7 @@ const App = () => (
           {/* Thread routes */}
           <Route path="/t/:threadId" element={<FeatureChat />} />
           <Route path="/research" element={<Research />} />
+          <Route path="/translate" element={<Translate />} />
           <Route path="/history" element={<History />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
