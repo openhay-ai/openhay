@@ -13,12 +13,12 @@ from sqlmodel import Field, Relationship, SQLModel
 
 
 class FeatureKey(str, Enum):
-    ai_tim_kiem = "ai_tim_kiem"
-    giai_bai_tap = "giai_bai_tap"
-    ai_viet_van = "ai_viet_van"
-    dich = "dich"
-    tom_tat = "tom_tat"
-    mindmap = "mindmap"
+    ai_tim_kiem = "Hỏi Đáp"
+    giai_bai_tap = "Giải Bài Tập"
+    ai_viet_van = "AI Viết Văn"
+    dich = "Dịch"
+    tom_tat = "Tóm Tắt"
+    mindmap = "Mindmap"
 
 
 class MessageRole(str, Enum):

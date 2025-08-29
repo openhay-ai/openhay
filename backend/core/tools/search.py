@@ -33,6 +33,7 @@ async def fetch_url(
         escape_html=escape_html,
         pruned=pruned,
     )
+
     return results
 
 

@@ -16,7 +16,6 @@ from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic_ai.messages import ModelMessagesTypeAdapter
 
-
 router = APIRouter(prefix="/api/translate", tags=["translate"])
 
 
@@ -73,7 +72,7 @@ async def translate_url(payload: TranslateURLRequest) -> StreamingResponse:
                     return
 
                 # Build user prompt content
-                user_prompt = payload.message + "\n\n" + content_md
+                user_prompt = payload.message
 
                 async def on_complete(result) -> list[str]:
                     events: list[str] = []
@@ -93,7 +92,9 @@ async def translate_url(payload: TranslateURLRequest) -> StreamingResponse:
                     translate_agent,
                     user_prompt,
                     deps=TranslateDeps(
-                        target_lang=payload.target_lang, source_lang=payload.source_lang
+                        target_lang=payload.target_lang,
+                        source_lang=payload.source_lang,
+                        content_to_translate=content_md,
                     ),
                     message_history=message_history,
                     on_complete=on_complete,

@@ -10,8 +10,8 @@ import logfire
 from aiohttp import ClientSession
 from backend.settings import settings
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
-from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from crawl4ai.content_filter_strategy import PruningContentFilter
+from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from loguru import logger
 from pydantic import BaseModel
 
@@ -125,6 +125,7 @@ class WebDiscovery:
             # Update after any required wait to mark the time of this call
             self._last_brave_call_ts = monotonic()
 
+    @logfire.instrument("web_discovery.crawl")
     async def crawl(
         self,
         urls: Iterable[str],
@@ -148,14 +149,14 @@ class WebDiscovery:
         """
         # Step 1: Create a pruning filter
         if pruned:
-            logger.info("Use pruning filter")
+            logger.debug("Use pruning filter")
             prune_filter = PruningContentFilter(
                 threshold=1.0,
-                threshold_type="fixed",
+                threshold_type="dynamic",
                 min_word_threshold=10,
             )
         else:
-            logger.info("Don't use pruning filter")
+            logger.debug("Don't use pruning filter")
             prune_filter = None
 
         md_generator = DefaultMarkdownGenerator(
@@ -227,8 +228,22 @@ class WebDiscovery:
                     content: Optional[str] = None
                     image_url: Optional[str] = None
                     if crawl_result.success:
-                        content = str(crawl_result.markdown.fit_markdown)
+                        raw_markdown = str(crawl_result.markdown.raw_markdown)
+                        fit_markdown = str(crawl_result.markdown.fit_markdown)
+                        content = (
+                            fit_markdown
+                            if len(fit_markdown.replace("\n", "").strip()) > 1
+                            else raw_markdown
+                        )
                         image_url = _extract_first_image_url(content, url)
+                        logfire.info(
+                            "Crawl success",
+                            url=url,
+                            image_url=image_url,
+                            content=content,
+                            fit_markdown=fit_markdown,
+                            raw_markdown=raw_markdown,
+                        )
                     else:
                         logfire.info("Crawl failed", url=url)
                 return {"url": url, "content": content, "image_url": image_url}

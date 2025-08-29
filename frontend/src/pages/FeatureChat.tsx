@@ -181,8 +181,8 @@ const FeatureChat = () => {
     const preload = st.preloadMessages as ChatMessage[] | undefined;
     const openTranslate = st.openTranslate as boolean | undefined;
     const translateRun = st.translateRun as
-      | { kind: "link"; url: string; source_lang: string; target_lang: string; assistantId: string }
-      | { kind: "file"; media: any[]; source_lang: string; target_lang: string; assistantId: string }
+      | { kind: "link"; url: string; source_lang: string; target_lang: string; assistantId: string; message?: string }
+      | { kind: "file"; media: any[]; source_lang: string; target_lang: string; assistantId: string; message?: string }
       | undefined;
     if (threadId && preload && preload.length > 0) {
       setMessages(preload);
@@ -208,9 +208,10 @@ const FeatureChat = () => {
             abortRef.current = ac;
             setIsStreaming(true);
             const endpoint = translateRun.kind === "link" ? getTranslateUrlSseEndpoint() : getTranslateFileSseEndpoint();
+            const message = translateRun.message;
             const body = translateRun.kind === "link"
-              ? { url: translateRun.url, source_lang: translateRun.source_lang, target_lang: translateRun.target_lang }
-              : { media: (translateRun as any).media, source_lang: translateRun.source_lang, target_lang: translateRun.target_lang };
+              ? { url: translateRun.url, source_lang: translateRun.source_lang, target_lang: translateRun.target_lang, message }
+              : { media: (translateRun as any).media, source_lang: translateRun.source_lang, target_lang: translateRun.target_lang, message };
             const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ac.signal });
             if (!res.ok || !res.body) throw new Error(`Bad response: ${res.status}`);
             const reader = res.body.getReader();

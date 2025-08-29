@@ -58,18 +58,18 @@ async def list_conversations() -> dict[str, list[ConversationListItem]]:
 
         items: list[ConversationListItem] = []
 
-        # Build previews by scanning latest runs per conversation (best-effort)
+        # Build previews by scanning runs in chronological order (best-effort)
         for conv in conversations:
             preview: str | None = None
             try:
                 runs = await conversation_repo.list_message_runs(conv.id)
-                for run in reversed(runs):
+                for run in runs:
                     try:
                         objs = ModelMessagesTypeAdapter.validate_python(run.messages)
                     except Exception:
                         objs = []
-                    # find last user prompt in this run
-                    for msg in reversed(list(objs)):
+                    # find first user prompt in this run
+                    for msg in list(objs):
                         kind = (
                             msg.get("kind") if isinstance(msg, dict) else getattr(msg, "kind", None)
                         )

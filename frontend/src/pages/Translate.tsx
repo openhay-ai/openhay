@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import FileUploader, { UploadItem } from "@/components/translate/FileUploader";
 import { useEffect, useRef, useState } from "react";
-import { getTranslateFileSseEndpoint, getTranslateUrlSseEndpoint } from "@/lib/api";
 import { useNavigate } from "react-router-dom";
 
 const ACCEPT = [
@@ -26,6 +25,7 @@ const Translate = () => {
   const navigate = useNavigate();
   const [tab, setTab] = useState("link");
   const [url, setUrl] = useState("");
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const [sourceLang, setSourceLang] = useState("Tự động");
   const [targetLang, setTargetLang] = useState("Tiếng Việt");
@@ -39,22 +39,36 @@ const Translate = () => {
   }, []);
 
   // streaming handled in FeatureChat; navigation happens immediately with preload state
+  const isValidHttpUrl = (value: string): boolean => {
+    try {
+      const u = new URL(value);
+      return u.protocol === "http:" || u.protocol === "https:";
+    } catch {
+      return false;
+    }
+  };
 
   const handleSubmitLink = async () => {
-    if (submitting || !url.trim()) return;
+    if (submitting) return;
+    const pureUrl = url.trim();
+    if (!pureUrl || !isValidHttpUrl(pureUrl)) {
+      setUrlError("URL không hợp lệ");
+      return;
+    }
     setSubmitting(true);
     try {
+      const message = `Dịch từ '${sourceLang}' sang '${targetLang}'\n\n${pureUrl}`;
       const userMsg = {
         id: crypto.randomUUID(),
         role: "user" as const,
-        content: `Dịch từ '${sourceLang}' sang '${targetLang}'\n\n${url}`,
+        content: message,
       };
       const assistantMsg = { id: crypto.randomUUID(), role: "assistant" as const, content: "" };
       navigate(`/t/pending`, {
         replace: true,
         state: {
           preloadMessages: [userMsg, assistantMsg],
-          translateRun: { kind: "link", url, source_lang: sourceLang, target_lang: targetLang, assistantId: assistantMsg.id },
+          translateRun: { kind: "link", url: pureUrl, source_lang: sourceLang, target_lang: targetLang, assistantId: assistantMsg.id, message },
         },
       });
     } finally {
@@ -71,17 +85,18 @@ const Translate = () => {
       const commaIdx = dataUrl.indexOf(",");
       const base64Data = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl;
       const media = [{ data: base64Data, media_type: file.type || "application/octet-stream", identifier: file.name }];
+      const message = `Dịch từ '${sourceLang}' sang '${targetLang}' cho file '${file.name}'`;
       const userMsg = {
         id: crypto.randomUUID(),
         role: "user" as const,
-        content: `Dịch từ '${sourceLang}' sang '${targetLang}' cho file '${file.name}'`,
+        content: message,
       };
       const assistantMsg = { id: crypto.randomUUID(), role: "assistant" as const, content: "" };
       navigate(`/t/pending`, {
         replace: true,
         state: {
           preloadMessages: [userMsg, assistantMsg],
-          translateRun: { kind: "file", media, source_lang: sourceLang, target_lang: targetLang, assistantId: assistantMsg.id },
+          translateRun: { kind: "file", media, source_lang: sourceLang, target_lang: targetLang, assistantId: assistantMsg.id, message },
         },
       });
     } finally {
@@ -129,11 +144,26 @@ const Translate = () => {
                       <p className="text-sm text-muted-foreground">Dán URL, chọn ngôn ngữ. OpenHay sẽ dịch mượt, giữ đúng thuật ngữ.</p>
                     </div>
                     <div className="flex items-center gap-3">
-                      <Input className="flex-1 h-10" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." aria-label="URL cần dịch" />
-                      <Button className="shrink-0" onClick={handleSubmitLink} disabled={submitting || !url.trim()}>
+                      <Input
+                        className="flex-1 h-10"
+                        value={url}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setUrl(v);
+                          const t = v.trim();
+                          setUrlError(t.length === 0 ? null : isValidHttpUrl(t) ? null : "URL không hợp lệ");
+                        }}
+                        aria-invalid={!!urlError}
+                        placeholder="https://..."
+                        aria-label="URL cần dịch"
+                      />
+                      <Button className="shrink-0" onClick={handleSubmitLink} disabled={submitting || !url.trim() || !!urlError}>
                         Dịch
                       </Button>
                     </div>
+                    {urlError ? (
+                      <p className="text-sm text-destructive">{urlError}</p>
+                    ) : null}
                   </TabsContent>
 
                   <TabsContent value="file" className="space-y-3">
