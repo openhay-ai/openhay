@@ -13,6 +13,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import city from "@/assets/thumb-city.jpg";
 import laptop from "@/assets/thumb-laptop.jpg";
 import nature from "@/assets/thumb-nature.jpg";
+import { cn } from "@/lib/utils";
 
 type FeaturedItem = { title: string; img?: string; url?: string };
 const fallbackFeatured: FeaturedItem[] = [
@@ -57,7 +58,7 @@ const Index = () => {
         if (items.length > 0) {
           const mapped = items.map((i) => ({ title: i.title, url: i.url, img: i.image_url }));
           setFeatured(mapped);
-        } 
+        }
       } catch (e) {
         // ignore and keep fallback
         setFeatured(fallbackFeatured);
@@ -82,7 +83,7 @@ const Index = () => {
 
       <div className="md:flex-auto overflow-hidden w-full md:ml-64">
         <main className="h-full overflow-auto w-full px-3 md:px-6">
-          
+
 
           <section className="max-w-3xl mx-auto pb-40 min-h-[calc(100vh-10rem)] flex items-center">
             <div className="flex flex-col items-center w-full">
@@ -96,8 +97,20 @@ const Index = () => {
                   <CarouselContent>
                     {filled.map((f) => (
                       <CarouselItem key={f.title} className="basis-full md:basis-1/3">
-                        <article className="flex items-center rounded-lg border overflow-hidden bg-card hover:shadow-md transition-shadow">
-                          <img src={f.img ?? city} width={60} height={60} alt={f.title} className="object-cover size-[60px]" loading="lazy" />
+                        <article
+                          onClick={() => handleSubmit(`Tin tức về ${f.title}`)}
+                          className={cn(
+                            "flex items-center rounded-lg border overflow-hidden bg-card hover:shadow-md transition-shadow cursor-pointer"
+                          )}
+                        >
+                          <img
+                            src={f.img ?? city}
+                            width={60}
+                            height={60}
+                            alt={f.title}
+                            className="object-cover size-[60px]"
+                            loading="lazy"
+                          />
                           <div className="px-3 py-2 text-sm">{f.title}</div>
                         </article>
                       </CarouselItem>
@@ -114,8 +127,8 @@ const Index = () => {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {chips.map((c) => (
-                    <Button key={c} variant="chip" size="sm" asChild>
-                      <a href="#" aria-label={c}>{c}</a>
+                    <Button key={c} variant="chip" size="sm" onClick={() => handleSubmit(c)}>
+                      {c}
                     </Button>
                   ))}
                 </div>

@@ -304,7 +304,7 @@ const Research = () => {
           <header className="flex justify-between items-center gap-3 py-4">
             <div>
               <h1 className="text-2xl font-semibold">Nghiên cứu chuyên sâu</h1>
-              <p className="text-muted-foreground text-sm">Tổng hợp và phân tích từ nhiều nguồn để cho ra câu trả lời cặn kẽ nhất.</p>
+              <p className="text-muted-foreground text-sm">Trợ lý AI tự động nghiên cứu, phân tích và tổng hợp thông tin.</p>
             </div>
           </header>
 
@@ -312,8 +312,23 @@ const Research = () => {
             <div className="flex flex-col gap-4 mt-6">
               {/* Intro helper when idle */}
               {!timelineVisible && !hasSubmitted ? (
-                <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground">
-                  Bạn cần tìm hiểu về gì? Cứ để AI lo. Từ việc lên kế hoạch, tìm kiếm, đến tổng hợp thành một báo cáo hoàn chỉnh.
+                <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground space-y-2">
+                  <p>
+                    Khi bạn đặt câu hỏi, AI sẽ hoạt động như một trợ lý cần mẫn, thực hiện một quy trình nghiên cứu chuyên sâu có thể <b>mất vài phút</b>.
+                  </p>
+                  <p>AI sẽ tự động:</p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>
+                      <strong>Lên kế hoạch:</strong> Phân tích chủ đề để xác định các hướng đi quan trọng.
+                    </li>
+                    <li>
+                      <strong>Tìm kiếm đa chiều:</strong> Truy vấn nhiều nguồn thông tin đáng tin cậy trên web.
+                    </li>
+                    <li>
+                      <strong>Tổng hợp báo cáo:</strong> Đọc hiểu, chắt lọc và viết thành một câu trả lời hoàn chỉnh kèm trích dẫn.
+                    </li>
+                  </ul>
+                  <p>Kết quả nhận được sẽ giúp bạn tiết kiệm hàng giờ tìm tòi và có được một cái nhìn sâu sắc về vấn đề.</p>
                 </div>
               ) : null}
 

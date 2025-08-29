@@ -22,26 +22,36 @@ from sqlalchemy import text
 router = APIRouter(prefix="/api/featured", tags=["featured"])
 
 
-class FeaturedItem(BaseModel):
+class BaseFeaturedItem(BaseModel):
     title: str = Field(description=("Title of the article, keep it short, within 10 words."))
-    url: HttpUrl
-    image_url: Optional[HttpUrl] = None
     summary: str
     source: str = Field(description="domain, e.g. vnexpress.net")
+
+
+class FeaturedItem(BaseFeaturedItem):
+    url: HttpUrl
     published_at: Optional[datetime] = None
+    image_url: Optional[HttpUrl] = Field(
+        description="From the content, select the image URL that you think is most relevant."
+    )
+
+
+class LlmFeaturedItem(BaseFeaturedItem):
+    index: int = Field(description="Index of the article in the list. Starts from 0.")
 
 
 # Agent to extract top articles from crawled pages
 news_agent = Agent(
     settings.model,
-    output_type=list[FeaturedItem],
+    output_type=list[LlmFeaturedItem],
     system_prompt=(
         "You are a news curator for Vietnam.\n"
         "Given a list of crawled pages (title, site, url, content), "
         "pick the TOP 10 most important news in Vietnam for a given day.\n"
         "Prefer breaking news, politics, economy, social, technology.\n"
-        "Return JSON list with: title, url, optional image_url, "
-        "1-2 sentence summary, source domain, and optional published_at (ISO)."
+        "Return JSON list with: index (important), title"
+        "1-2 sentence summary, source domain,"
+        "image URL, and optional published_at (ISO)."
     ),
 )
 
@@ -81,10 +91,7 @@ async def get_today_featured(
                         acquired = bool(res.scalar())
 
                         if acquired:
-                            logger.info(
-                                "Acquired lock, generating featured for %s",
-                                today,
-                            )
+                            logger.info(f"Acquired lock, generating featured for {today}")
                             try:
                                 await generate_today_featured(today)
                             finally:
@@ -94,25 +101,16 @@ async def get_today_featured(
                                 )
                             use_suggestions = await sug_repo.list_for_day(today)
                             cnt = len(use_suggestions)
-                            logger.info(
-                                "Returning %d items for %s",
-                                cnt,
-                                today,
-                            )
+                            logger.info(f"Returning {cnt} items for {today}")
                         else:
                             logger.info(
-                                "Worker generating for %s; waiting...",
-                                today,
+                                f"Worker generating for {today} waiting...",
                             )
 
                             # Fallback to yesterday if not ready in time
                             yesterday_featured = await sug_repo.list_for_day(yesterday)
                             cnt = len(yesterday_featured)
-                            logger.info(
-                                "Timeout; returning %d items for %s",
-                                cnt,
-                                yesterday,
-                            )
+                            logger.info(f"Timeout; returning {cnt} items for {yesterday}")
                             use_suggestions = yesterday_featured
             else:
                 # Before cutoff, do not generate yet; use yesterday's
@@ -158,12 +156,13 @@ async def generate_today_featured(target_day: date) -> list[FeaturedItem]:
     results = await WebDiscovery().discover(q, count=20)
 
     docs: list[dict] = []
-    for r in results:
+    for idx, r in enumerate(results):
         docs.append(
             {
+                "index": idx,
                 "title": r.title,
-                "site": (r.meta_url.get("hostname") if r.meta_url else urlparse(r.url).hostname),
                 "url": r.url,
+                "image_url": r.image_url,
                 "content": r.content or r.description,
             }
         )
@@ -176,7 +175,19 @@ async def generate_today_featured(target_day: date) -> list[FeaturedItem]:
         f"Data: {docs!r}"
     )
     result = await news_agent.run(formatted_prompt)
-    items: list[FeaturedItem] = list(result.output)[:10]
+    selected_items: list[LlmFeaturedItem] = list(result.output)[:10]
+
+    items: list[FeaturedItem] = []
+    for doc in docs:
+        for si in selected_items:
+            if si.index == doc.get("index"):
+                # Extract the summary and title from LLM
+                # But every other fields are kept as original
+                doc["summary"] = si.summary
+                doc["title"] = si.title
+                doc["source"] = si.source
+                del doc["index"]
+                items.append(FeaturedItem.model_validate(doc))
 
     # Persist
     async with AsyncSessionLocal() as session:
@@ -187,7 +198,7 @@ async def generate_today_featured(target_day: date) -> list[FeaturedItem]:
         articles_to_store: list[Article] = []
         suggestions_to_store: list[DailySuggestion] = []
 
-        for idx, it in enumerate(items, start=1):
+        for idx, it in enumerate(items):
             domain = urlparse(str(it.url)).hostname or ""
             src = await src_repo.get_or_create(domain=domain, name=domain)
             art = Article(
