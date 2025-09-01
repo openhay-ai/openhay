@@ -32,3 +32,7 @@ export function getTranslateUrlSseEndpoint(): string {
 export function getTranslateFileSseEndpoint(): string {
   return `${getApiBaseUrl()}/api/translate/file`;
 }
+
+export function getSupportEndpoint(): string {
+  return `${getApiBaseUrl()}/api/support`;
+}

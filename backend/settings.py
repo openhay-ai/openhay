@@ -36,6 +36,15 @@ class Settings(BaseSettings):
     # Telemetry
     logfire_write_token: Optional[str] = None
 
+    # SMTP / Support
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_use_tls: bool = True
+    support_owner_email: Optional[str] = "quymyhungill@gmail.com"
+    support_from_email: Optional[str] = None
+
     @property
     def model(self) -> Model:
         if self.llm_provider == "openai":
