@@ -37,4 +37,4 @@ ENV PORT=${PORT}
 EXPOSE ${PORT}
 
 # Start FastAPI with Uvicorn; bind to 0.0.0.0 and $PORT
-CMD ["sh", "-c", "uvicorn backend.api.main:app --host 0.0.0.0 --port ${PORT}"]
+CMD ["sh", "-c", "uvicorn api.main:app --host 0.0.0.0 --port ${PORT}"]
