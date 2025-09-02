@@ -12,15 +12,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install system deps (build tools + Chromium/Playwright runtime libs for Crawl4AI)
+# Install essential system dependencies first
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     ca-certificates \
-    fonts-unifont \
-    fonts-ubuntu \
-    fonts-liberation \
-    # Chromium / Playwright runtime deps
+  && rm -rf /var/lib/apt/lists/*
+
+# Install Chromium/Playwright runtime dependencies in a separate step for better error handling
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libnss3 \
     libnspr4 \
@@ -31,24 +31,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxkbcommon0 \
     libxcomposite1 \
     libxdamage1 \
-    libxfixes3 \
     libxrandr2 \
     libasound2 \
-    libatspi2.0-0 \
     libpangocairo-1.0-0 \
     libpango-1.0-0 \
     libcairo2 \
     libgdk-pixbuf-2.0-0 \
     libgtk-3-0 \
-    libx11-xcb1 \
     libx11-6 \
     libxext6 \
     libxcb1 \
     libxrender1 \
     libgbm1 \
     libxshmfence1 \
-    libdbus-1-3 \
-  && rm -rf /var/lib/apt/lists/*
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Install fonts separately (these are often optional and can fail)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    fonts-liberation \
+    fonts-dejavu-core \
+  && apt-get clean \
+  && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* || true
 
 # Install uv package manager
 RUN pip install --no-cache-dir uv
