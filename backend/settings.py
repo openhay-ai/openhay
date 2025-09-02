@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     brave_search_url: str = "https://api.search.brave.com/res/v1/web/search"
 
     # Telemetry
-    logfire_write_token: Optional[str] = None
+    logfire_token: Optional[str] = None
 
     # SMTP / Support
     smtp_host: str = "smtp.gmail.com"

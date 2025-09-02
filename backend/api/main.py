@@ -10,6 +10,7 @@ from backend.api.routers.health import router as health_router
 from backend.api.routers.research import router as research_router
 from backend.api.routers.translate import router as translate_router
 from backend.db import async_engine, create_all, seed_feature_presets
+from backend.settings import settings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -44,7 +45,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Open AI Hay API", lifespan=lifespan)
 
-logfire.configure(scrubbing=False)
+logfire.configure(token=settings.logfire_token, scrubbing=False)
 logfire.instrument_fastapi(app)
 
 

@@ -6,7 +6,7 @@ from backend.core.agents.translate.prompts import (
 from backend.settings import settings
 from pydantic_ai import Agent, RunContext
 
-logfire.configure(token=settings.logfire_write_token, scrubbing=False)
+logfire.configure(token=settings.logfire_token, scrubbing=False)
 logfire.instrument_pydantic_ai()
 
 
