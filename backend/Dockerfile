@@ -1,5 +1,5 @@
 # Minimal Dockerfile for FastAPI on Railway (SSE-friendly)
-# Uses Python 3.12 slim and uv for fast, reproducible installs
+# Uses Python 3.13 slim and uv for fast, reproducible installs
 
 FROM python:3.13-slim AS base
 
@@ -11,9 +11,39 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Install system deps needed by psycopg (binary) and build tools minimally
+# Install system deps (build tools + Chromium/Playwright runtime libs for Crawl4AI)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    curl \
+    ca-certificates \
+    # Chromium / Playwright runtime deps
+    libglib2.0-0 \
+    libnss3 \
+    libnspr4 \
+    libatk1.0-0 \
+    libatk-bridge2.0-0 \
+    libcups2 \
+    libdrm2 \
+    libxkbcommon0 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxfixes3 \
+    libxrandr2 \
+    libasound2 \
+    libatspi2.0-0 \
+    libpangocairo-1.0-0 \
+    libpango-1.0-0 \
+    libcairo2 \
+    libgdk-pixbuf-2.0-0 \
+    libgtk-3-0 \
+    libx11-xcb1 \
+    libx11-6 \
+    libxext6 \
+    libxcb1 \
+    libxrender1 \
+    libgbm1 \
+    libxshmfence1 \
+    libdbus-1-3 \
   && rm -rf /var/lib/apt/lists/*
 
 # Install uv package manager
@@ -25,10 +55,12 @@ COPY pyproject.toml uv.lock ./
 # Install project dependencies into a local virtualenv at /app/.venv
 RUN uv sync --locked --no-dev
 
+# Ensure browsers and dependencies for Crawl4AI/Playwright are installed
+RUN /app/.venv/bin/crawl4ai-setup \
+  && /app/.venv/bin/python -m playwright install --with-deps chromium
+
 # Ensure ASGI server is available in the same environment
 RUN /app/.venv/bin/pip install --no-cache-dir "uvicorn[standard]>=0.30"
-
-VOLUME /app/.venv
 
 # Copy backend source under a top-level package path so imports like `backend.*` work
 COPY . /app/backend
