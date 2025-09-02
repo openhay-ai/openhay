@@ -45,3 +45,12 @@ class DailySuggestionRepository(BaseRepository[DailySuggestion]):
                 stored.append(s)
         await self.flush()
         return stored
+
+    async def get_last_day(self) -> Optional[date]:
+        stmt = (
+            select(DailySuggestion.suggestion_date)
+            .order_by(DailySuggestion.suggestion_date.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().first()

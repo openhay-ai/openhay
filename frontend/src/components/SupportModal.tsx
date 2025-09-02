@@ -25,23 +25,34 @@ type Props = {
 const SupportModal = ({
   open,
   onOpenChange,
-  ownerEmail = "quymyhungill@gmail.com",
+  ownerEmail,
   onSubmit,
 }: Props) => {
   const [email, setEmail] = useState("");
   const [question, setQuestion] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [emailError, setEmailError] = useState<string>("");
   const { toast } = useToast();
 
   useEffect(() => {
     if (!open) {
       setSubmitting(false);
+      setEmailError("");
     }
   }, [open]);
+
+  const isValidEmail = (value: string) => {
+    const re = /^(?:[a-zA-Z0-9_'^&\-+])+(?:\.(?:[a-zA-Z0-9_'^&\-+])+)*@(?:(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,})$/;
+    return re.test(value.trim());
+  };
 
   const handleSubmit = async () => {
     if (submitting) return;
     if (!email.trim() || !question.trim()) return;
+    if (!isValidEmail(email)) {
+      setEmailError("Email không hợp lệ");
+      return;
+    }
     setSubmitting(true);
     try {
       if (onSubmit) {
@@ -66,6 +77,7 @@ const SupportModal = ({
       });
       setEmail("");
       setQuestion("");
+      setEmailError("");
     } finally {
       setSubmitting(false);
     }
@@ -74,14 +86,14 @@ const SupportModal = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader>
+        <DialogHeader className="p-1 sm:p-2">
           <DialogTitle>Hỗ trợ</DialogTitle>
           <DialogDescription>
             Vui lòng để lại email và câu hỏi của bạn. Chúng tôi sẽ phản hồi sớm.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 p-1 sm:p-2">
           <div className="text-sm text-muted-foreground">
             Email của chúng tôi:{" "}
             <a className="underline" href={`mailto:${ownerEmail}`}>
@@ -97,8 +109,23 @@ const SupportModal = ({
               type="email"
               placeholder="you@example.com"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setEmail(value);
+                if (!value.trim()) {
+                  setEmailError("");
+                } else if (!isValidEmail(value)) {
+                  setEmailError("Email không hợp lệ");
+                } else {
+                  setEmailError("");
+                }
+              }}
+              aria-invalid={!!emailError}
+              className={emailError ? "border-destructive" : undefined}
             />
+            {emailError ? (
+              <p className="text-sm text-destructive">{emailError}</p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <label className="text-sm font-medium" htmlFor="support-question">
@@ -110,6 +137,7 @@ const SupportModal = ({
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               rows={5}
+              className="resize-none"
             />
           </div>
           <div className="flex items-center justify-between">
@@ -123,7 +151,12 @@ const SupportModal = ({
             </a>
             <Button
               onClick={handleSubmit}
-              disabled={submitting || !email.trim() || !question.trim()}
+              disabled={
+                submitting ||
+                !email.trim() ||
+                !question.trim() ||
+                (email.trim() && !isValidEmail(email))
+              }
             >
               Gửi
             </Button>

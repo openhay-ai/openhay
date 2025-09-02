@@ -34,5 +34,5 @@ export function getTranslateFileSseEndpoint(): string {
 }
 
 export function getSupportEndpoint(): string {
-  return `${getApiBaseUrl()}/api/support`;
+  return `${getApiBaseUrl()}/api/contact/support`;
 }

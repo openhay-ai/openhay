@@ -141,7 +141,7 @@ export const SidebarNav = () => {
       <SupportModal
         open={supportOpen}
         onOpenChange={setSupportOpen}
-        ownerEmail="quymyhungill@gmail.com"
+        ownerEmail="quangphamm1902@gmail.com"
       />
     </aside>
   );

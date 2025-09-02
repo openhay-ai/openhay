@@ -37,13 +37,17 @@ class Settings(BaseSettings):
     logfire_write_token: Optional[str] = None
 
     # SMTP / Support
-    smtp_host: Optional[str] = None
-    smtp_port: Optional[int] = None
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 465
     smtp_username: Optional[str] = None
     smtp_password: Optional[str] = None
     smtp_use_tls: bool = True
-    support_owner_email: Optional[str] = "quymyhungill@gmail.com"
+    support_owner_email: Optional[str] = None
     support_from_email: Optional[str] = None
+
+    # Analytics / Privacy
+    collect_client_ip: bool = True
+    analytics_ip_salt: Optional[str] = None
 
     @property
     def model(self) -> Model:
@@ -72,7 +76,10 @@ class Settings(BaseSettings):
                 "include_thoughts": True,
             }
         )
-        return GoogleModel(model_name=self.subagent_research_llm_model, settings=google_settings)
+        return GoogleModel(
+            model_name=self.subagent_research_llm_model,
+            settings=google_settings,
+        )
 
     @property
     def subagent_research_model(self) -> Model:
@@ -82,7 +89,10 @@ class Settings(BaseSettings):
                 "include_thoughts": True,
             }
         )
-        return GoogleModel(model_name=self.subagent_research_llm_model, settings=google_settings)
+        return GoogleModel(
+            model_name=self.subagent_research_llm_model,
+            settings=google_settings,
+        )
 
 
 settings = Settings()
