@@ -67,9 +67,6 @@ RUN uv sync --locked --no-dev
 RUN /app/.venv/bin/crawl4ai-setup || true
 RUN /app/.venv/bin/python -m playwright install chromium || true
 
-# Ensure ASGI server is available in the same environment
-RUN /app/.venv/bin/pip install --no-cache-dir "uvicorn[standard]>=0.30"
-
 # Copy backend source under a top-level package path so imports like `backend.*` work
 COPY . /app/backend
 
