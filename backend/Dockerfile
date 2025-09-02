@@ -7,7 +7,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PATH="/root/.local/bin:${PATH}" \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
@@ -16,6 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     ca-certificates \
+    fonts-unifont \
+    fonts-ubuntu \
+    fonts-liberation \
     # Chromium / Playwright runtime deps
     libglib2.0-0 \
     libnss3 \
@@ -55,9 +59,9 @@ COPY pyproject.toml uv.lock ./
 # Install project dependencies into a local virtualenv at /app/.venv
 RUN uv sync --locked --no-dev
 
-# Ensure browsers and dependencies for Crawl4AI/Playwright are installed
-RUN /app/.venv/bin/crawl4ai-setup \
-  && /app/.venv/bin/python -m playwright install --with-deps chromium
+# Ensure browsers are available for Crawl4AI (avoid Ubuntu-only --with-deps on Debian)
+RUN /app/.venv/bin/crawl4ai-setup || true
+RUN /app/.venv/bin/python -m playwright install chromium || true
 
 # Ensure ASGI server is available in the same environment
 RUN /app/.venv/bin/pip install --no-cache-dir "uvicorn[standard]>=0.30"
