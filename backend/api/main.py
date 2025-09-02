@@ -9,7 +9,7 @@ from backend.api.routers.featured import router as featured_router
 from backend.api.routers.health import router as health_router
 from backend.api.routers.research import router as research_router
 from backend.api.routers.translate import router as translate_router
-from backend.db import async_engine
+from backend.db import async_engine, create_all, seed_feature_presets
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -33,6 +33,9 @@ async def lifespan(app: FastAPI):
     # Verify DB connectivity on startup; dispose engine on shutdown
     async with async_engine.connect() as conn:
         await conn.execute(text("SELECT 1"))
+    # Ensure database schema and seeds are initialized (idempotent)
+    await create_all()
+    await seed_feature_presets()
     try:
         yield
     finally:
