@@ -6,8 +6,8 @@ FROM python:3.13-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    UV_SYSTEM_PYTHON=1 \
-    PATH="/root/.local/bin:${PATH}"
+    PATH="/root/.local/bin:${PATH}" \
+    PYTHONPATH=/app
 
 WORKDIR /app
 
@@ -22,14 +22,19 @@ RUN pip install --no-cache-dir uv
 # Copy dependency manifests first for better layer caching
 COPY pyproject.toml uv.lock ./
 
-# Install project dependencies (no dev) into system site-packages
-RUN uv sync --locked --no-install-project --no-dev
+# Install project dependencies into a local virtualenv at /app/.venv
+RUN uv sync --locked --no-dev
 
-# Ensure ASGI server is available (use uvicorn by default)
-RUN pip install --no-cache-dir "uvicorn[standard]>=0.30"
+# Ensure ASGI server is available in the same environment
+RUN /app/.venv/bin/pip install --no-cache-dir "uvicorn[standard]>=0.30"
+
+VOLUME /app/.venv
 
 # Copy backend source under a top-level package path so imports like `backend.*` work
 COPY . /app/backend
+
+# Place executables in the environment at the front of the path
+ENV PATH="/app/.venv/bin:$PATH"
 
 # Railway provides $PORT. Expose for local clarity.
 ARG PORT=8000
