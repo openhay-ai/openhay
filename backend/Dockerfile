@@ -25,6 +25,9 @@ COPY pyproject.toml uv.lock ./
 # Install project dependencies (no dev) into system site-packages
 RUN uv sync --locked --no-install-project --no-dev
 
+# Ensure ASGI server is available (use uvicorn by default)
+RUN pip install --no-cache-dir "uvicorn[standard]>=0.30"
+
 # Copy backend source
 COPY . /app
 
