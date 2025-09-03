@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { getSupportEndpoint } from "@/lib/api";
+import { withAuthHeaders } from "@/lib/auth";
 
 type Props = {
   open: boolean;
@@ -58,11 +59,12 @@ const SupportModal = ({
       if (onSubmit) {
         await onSubmit({ email, question });
       } else {
-        const res = await fetch(getSupportEndpoint(), {
+        const init = await withAuthHeaders({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, question }),
         });
+        const res = await fetch(getSupportEndpoint(), init);
         if (!res.ok) {
           const data = await res.json().catch(() => ({}));
           const message = (data && data.detail) || "Gửi thất bại";
