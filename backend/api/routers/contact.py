@@ -35,7 +35,7 @@ def _send_email(
             attachments=attachments or [],
         )
     except Exception as exc:  # noqa: BLE001
-        msg = f"SMTP send error: {type(exc).__name__}: {exc}"
+        msg = f"Email send error: {type(exc).__name__}: {exc}"
         raise RuntimeError(msg) from exc
 
 
@@ -179,15 +179,6 @@ async def submit_support(req: SupportRequest, request: Request) -> dict[str, str
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="Question is required")
 
-    if not _smtp_configured():
-        # Dev fallback: avoid 500s in environments without SMTP configured
-        logger.warning(
-            "SMTP not configured. Logging support request instead. email={}, len(question)={}",
-            req.email,
-            len(req.question or ""),
-        )
-        return {"status": "ok"}
-
     ctx = _compose_context(request)
 
     subject = "[OpenHay][Support] New request"
@@ -227,7 +218,7 @@ async def submit_support(req: SupportRequest, request: Request) -> dict[str, str
         )
     except RuntimeError as exc:
         # Surface clear error for frontend to display
-        logger.exception("Failed to send support email via SMTP")
+        logger.exception("Failed to send support email")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return {"status": "ok"}
@@ -239,13 +230,6 @@ class WaitlistRequest(BaseModel):
 
 @router.post("/waitlist")
 async def join_waitlist(req: WaitlistRequest, request: Request) -> dict[str, str]:
-    if not _smtp_configured():
-        logger.warning(
-            "SMTP not configured. Logging waitlist join. email={}",
-            req.email,
-        )
-        return {"status": "ok"}
-
     ctx = _compose_context(request)
 
     subject = "[OpenHay][Waitlist] New signup"
@@ -281,7 +265,7 @@ async def join_waitlist(req: WaitlistRequest, request: Request) -> dict[str, str
             attachments=[("metadata.yaml", metadata_yaml, "yaml")],
         )
     except RuntimeError as exc:
-        logger.exception("Failed to send waitlist email via SMTP")
+        logger.exception("Failed to send waitlist email")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return {"status": "ok"}

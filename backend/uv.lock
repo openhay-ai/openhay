@@ -1360,6 +1360,7 @@ dependencies = [
     { name = "pydantic", extra = ["email"] },
     { name = "pydantic-ai", extra = ["logfire"] },
     { name = "pyjwt" },
+    { name = "resend" },
     { name = "slowapi" },
     { name = "sqlalchemy" },
     { name = "sqlmodel" },
@@ -1377,6 +1378,7 @@ requires-dist = [
     { name = "pydantic", extras = ["email"], specifier = ">=2.7" },
     { name = "pydantic-ai", extras = ["logfire"], specifier = ">=0.7.5" },
     { name = "pyjwt", specifier = ">=2.8.0" },
+    { name = "resend", specifier = ">=2.13.1" },
     { name = "slowapi", specifier = ">=0.1.9" },
     { name = "sqlalchemy", specifier = ">=2.0.30" },
     { name = "sqlmodel", specifier = ">=0.0.21" },
@@ -2177,6 +2179,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e1/0a/929373653770d8a0d7ea76c37de6e41f11eb07559b103b1c02cafb3f7cf8/requests-2.32.4.tar.gz", hash = "sha256:27d0316682c8a29834d3264820024b62a36942083d52caf2f14c0591336d3422", size = 135258 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7c/e4/56027c4a6b4ae70ca9de302488c5ca95ad4a39e190093d6c1a8ace08341b/requests-2.32.4-py3-none-any.whl", hash = "sha256:27babd3cda2a6d50b30443204ee89830707d396671944c998b5975b031ac2b2c", size = 64847 },
+]
+
+[[package]]
+name = "resend"
+version = "2.13.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d6/ba/de34669cd9ccf2efa65938691ae054e908cbb9c3f2f4cf5ec74d4bbc875e/resend-2.13.1.tar.gz", hash = "sha256:689e2abf17ec46acf97400c096869e95cbb0b67572b0132d1158fdbbf9b1deba", size = 15465 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ab/6a/a5837efa1e8ff6d5c8a40574b506f85ce725126303cedec7c6e1b4382a03/resend-2.13.1-py2.py3-none-any.whl", hash = "sha256:4104d3c8f2c91113c7629e4d51ab1ca255272dd9355d2c584ab1fc10a8c65bee", size = 22279 },
 ]
 
 [[package]]

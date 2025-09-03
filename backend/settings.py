@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     support_owner_email: Optional[str] = None
     support_from_email: Optional[str] = None
 
+    # Email provider (prod: use https provider like resend)
+    email_provider: Literal["smtp", "resend"] = "smtp"
+    resend_api_key: Optional[str] = None
+
     # Analytics / Privacy
     collect_client_ip: bool = True
     analytics_ip_salt: Optional[str] = None
