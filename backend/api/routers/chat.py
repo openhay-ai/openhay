@@ -47,7 +47,7 @@ async def list_conversations(
     """List all conversations with a brief preview."""
     async with AsyncSessionLocal() as session:
         conversation_repo = ConversationRepository(session)
-        conversations = await conversation_repo.list_all()
+        conversations = await conversation_repo.list_by_user_id(current_user.user_id)
 
         # Avoid lazy-loads in async by prefetching preset keys
         preset_ids = {c.feature_preset_id for c in conversations}
@@ -169,9 +169,15 @@ async def chat(payload: ChatRequest, current_user: CurrentUser) -> StreamingResp
                     conversation = await chat_service.get_conversation_by_id(
                         payload.conversation_id
                     )
+                    if conversation is not None:
+                        owner_id = None
+                        if isinstance(conversation.feature_params, dict):
+                            owner_id = conversation.feature_params.get("user_id")
+                        if owner_id and owner_id != current_user.user_id:
+                            raise HTTPException(status_code=403, detail="Forbidden")
                 if conversation is None:
                     create_default = chat_service.create_conversation_with_default_preset
-                    conversation = await create_default()
+                    conversation = await create_default(owner=current_user)
                     created_new_conversation = True
 
                 if created_new_conversation:
@@ -244,6 +250,17 @@ async def get_conversation_history(conversation_id: UUID, current_user: CurrentU
                 status_code=404,
                 detail="Conversation not found",
             )
+
+        # Enforce ownership: only allow if user_id matches
+        try:
+            owner_id = None
+            if isinstance(conversation.feature_params, dict):
+                owner_id = conversation.feature_params.get("user_id")
+            if owner_id and owner_id != current_user.user_id:
+                raise HTTPException(status_code=403, detail="Forbidden")
+        except Exception:
+            # On any unexpected structure, deny access for safety
+            raise HTTPException(status_code=403, detail="Forbidden")
 
         json_safe_parts = await chat_service.serialize_history(conversation_id)
 

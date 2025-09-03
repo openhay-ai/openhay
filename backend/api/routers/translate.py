@@ -53,8 +53,16 @@ async def translate_url(
                 created_new_conversation = False
                 if payload.conversation_id is not None:
                     conversation = await svc.get_conversation_by_id(payload.conversation_id)
+                    if conversation is not None:
+                        owner_id = None
+                        if isinstance(conversation.feature_params, dict):
+                            owner_id = conversation.feature_params.get("user_id")
+                        if owner_id and owner_id != current_user.user_id:
+                            from fastapi import HTTPException
+
+                            raise HTTPException(status_code=403, detail="Forbidden")
                 if conversation is None:
-                    conversation = await svc.create_conversation_with_preset()
+                    conversation = await svc.create_conversation_with_preset(owner=current_user)
                     created_new_conversation = True
 
                 if created_new_conversation:
@@ -149,8 +157,16 @@ async def translate_file(
                 created_new_conversation = False
                 if payload.conversation_id is not None:
                     conversation = await svc.get_conversation_by_id(payload.conversation_id)
+                    if conversation is not None:
+                        owner_id = None
+                        if isinstance(conversation.feature_params, dict):
+                            owner_id = conversation.feature_params.get("user_id")
+                        if owner_id and owner_id != current_user.user_id:
+                            from fastapi import HTTPException
+
+                            raise HTTPException(status_code=403, detail="Forbidden")
                 if conversation is None:
-                    conversation = await svc.create_conversation_with_preset()
+                    conversation = await svc.create_conversation_with_preset(owner=current_user)
                     created_new_conversation = True
 
                 if created_new_conversation:
@@ -185,7 +201,8 @@ async def translate_file(
                     translate_agent,
                     user_prompt,
                     deps=TranslateDeps(
-                        target_lang=payload.target_lang, source_lang=payload.source_lang
+                        target_lang=payload.target_lang,
+                        source_lang=payload.source_lang,
                     ),
                     message_history=message_history,
                     on_complete=on_complete,

@@ -12,8 +12,6 @@ from pydantic import BaseModel
 
 # JWT Configuration
 ALGORITHM = "HS256"
-# Generate a secure secret key - you should set this in your environment
-DEFAULT_SECRET_KEY = "your-secret-key-change-this-in-production"
 
 
 class TokenData(BaseModel):
@@ -29,7 +27,7 @@ class AuthUser(BaseModel):
 def get_jwt_secret_key() -> str:
     """Get JWT secret key from environment or use default for development."""
     # In production, always set JWT_SECRET_KEY environment variable
-    return getattr(settings, "jwt_secret_key", None) or DEFAULT_SECRET_KEY
+    return getattr(settings, "jwt_secret_key", None)
 
 
 def create_access_token(user_id: str, expires_delta: Optional[timedelta] = None) -> str:

@@ -54,6 +54,19 @@ class ConversationRepository(BaseRepository[Conversation]):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_by_user_id(self, user_id: str) -> list[Conversation]:
+        """
+        List conversations scoped to a specific user_id stored in
+        feature_params.
+        """
+        stmt = (
+            select(Conversation)
+            .where(Conversation.feature_params["user_id"].astext == user_id)
+            .order_by(Conversation.created_at.desc())
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def update_title(self, conversation: Conversation, title: Optional[str]) -> Conversation:
         conversation.title = title
         from datetime import timezone
