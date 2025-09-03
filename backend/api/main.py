@@ -3,7 +3,6 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 import logfire
-from backend import logger
 from backend.api.routers.chat import router as chat_router
 from backend.api.routers.contact import router as contact_router
 from backend.api.routers.featured import router as featured_router
@@ -14,6 +13,7 @@ from backend.db import async_engine, create_all, seed_feature_presets
 from backend.settings import settings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from loguru import logger
 from sqlalchemy import text
 
 
