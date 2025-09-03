@@ -74,7 +74,7 @@ COPY . /app/backend
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Railway provides $PORT. Expose for local clarity.
-ARG PORT=8000
+ARG PORT=8080
 ENV PORT=${PORT}
 EXPOSE ${PORT}
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 import logfire
+from backend import logger
 from backend.api.routers.chat import router as chat_router
 from backend.api.routers.contact import router as contact_router
 from backend.api.routers.featured import router as featured_router
@@ -42,6 +43,9 @@ def _get_cors_origins() -> list[str]:
         if o not in seen:
             unique.append(o)
             seen.add(o)
+
+    logger.info(f"Allowed origins: {unique}")
+
     return unique
 
 
