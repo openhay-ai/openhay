@@ -6,7 +6,7 @@ from backend.settings import settings
 from loguru import logger
 from pydantic_ai import Agent, RunContext
 
-logfire.configure(token=settings.logfire_token, scrubbing=False)
+logfire.configure(token=settings.logfire_token, scrubbing=False, environment=settings.env)
 logfire.instrument_pydantic_ai()
 
 # TODO: Improve the citation method to reduce the token usage.
@@ -16,6 +16,7 @@ chat_agent = Agent(
     settings.model,
     deps_type=ChatDeps,
     output_type=str,
+    retries=3,
 )
 
 
