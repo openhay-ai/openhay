@@ -203,6 +203,7 @@ async def translate_file(
                     deps=TranslateDeps(
                         target_lang=payload.target_lang,
                         source_lang=payload.source_lang,
+                        content_to_translate="",
                     ),
                     message_history=message_history,
                     on_complete=on_complete,
