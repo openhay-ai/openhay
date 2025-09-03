@@ -55,6 +55,16 @@ class Settings(BaseSettings):
     # Comma-separated list of extra origins
     allowed_origins: Optional[str] = None
 
+    # JWT Authentication
+    jwt_secret_key: Optional[str] = None
+
+    # Environment
+    env: Literal["prod", "dev"] = "prod"
+
+    # RPM
+    gemini_flash_rpm: int = 5
+    gemini_pro_rpm: int = 3
+
     @property
     def model(self) -> Model:
         if self.llm_provider == "openai":

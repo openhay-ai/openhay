@@ -7,6 +7,7 @@ from uuid import uuid4
 import logfire
 from backend.core.agents.research.agent import lead_research_agent, subagent
 from backend.core.agents.research.deps import ResearchDeps
+from backend.core.auth import CurrentUser
 from backend.core.mixins import ConversationMixin
 from backend.core.models import Conversation
 from backend.core.services.base import BinaryContentIn
@@ -67,7 +68,7 @@ def _sse(event: str, data: dict) -> str:
         }
     },
 )
-async def run_research(payload: ResearchRequest) -> StreamingResponse:
+async def run_research(payload: ResearchRequest, current_user: CurrentUser) -> StreamingResponse:
     deps = ResearchDeps()
 
     # Define deferred tools that the lead agent can "call"

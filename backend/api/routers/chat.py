@@ -8,6 +8,7 @@ import logfire
 from backend.api.routers.models.responses import ConversationHistoryResponse
 from backend.core.agents.chat.agent import chat_agent
 from backend.core.agents.chat.deps import ChatDeps
+from backend.core.auth import CurrentUser
 from backend.core.mixins import ConversationMixin
 from backend.core.models import FeatureKey, FeaturePreset
 from backend.core.repositories.conversation import ConversationRepository
@@ -40,7 +41,9 @@ class ConversationListItem(BaseModel):
 
 
 @router.get("", response_model=dict[str, list[ConversationListItem]])
-async def list_conversations() -> dict[str, list[ConversationListItem]]:
+async def list_conversations(
+    current_user: CurrentUser,
+) -> dict[str, list[ConversationListItem]]:
     """List all conversations with a brief preview."""
     async with AsyncSessionLocal() as session:
         conversation_repo = ConversationRepository(session)
@@ -153,7 +156,7 @@ async def list_conversations() -> dict[str, list[ConversationListItem]]:
         422: {"description": "Validation Error"},
     },
 )
-async def chat(payload: ChatRequest) -> StreamingResponse:
+async def chat(payload: ChatRequest, current_user: CurrentUser) -> StreamingResponse:
     async def stream_generator():
         try:
             async with AsyncSessionLocal() as session:
@@ -230,7 +233,7 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
 
 
 @router.get("/{conversation_id}", response_model=ConversationHistoryResponse)
-async def get_conversation_history(conversation_id: UUID) -> dict:
+async def get_conversation_history(conversation_id: UUID, current_user: CurrentUser) -> dict:
     """Return flattened message history for a conversation."""
     async with AsyncSessionLocal() as session:
         chat_service = ChatService(session)

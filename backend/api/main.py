@@ -3,12 +3,18 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 import logfire
+from backend.api.routers.auth import router as auth_router
 from backend.api.routers.chat import router as chat_router
 from backend.api.routers.contact import router as contact_router
 from backend.api.routers.featured import router as featured_router
 from backend.api.routers.health import router as health_router
 from backend.api.routers.research import router as research_router
 from backend.api.routers.translate import router as translate_router
+from backend.core.middleware import (
+    APIRateLimitMiddleware,
+    RequestSizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 from backend.db import async_engine, create_all, seed_feature_presets
 from backend.settings import settings
 from fastapi import FastAPI
@@ -68,6 +74,10 @@ app = FastAPI(title="Open AI Hay API", lifespan=lifespan)
 logfire.configure(token=settings.logfire_token, scrubbing=False)
 logfire.instrument_fastapi(app)
 
+# Security and rate limiting middleware
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestSizeLimitMiddleware, max_size=10 * 1024 * 1024)
+app.add_middleware(APIRateLimitMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -77,7 +87,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Public routes
 app.include_router(health_router)
+app.include_router(auth_router)
+
+# Protected routes
 app.include_router(chat_router)
 app.include_router(featured_router)
 app.include_router(research_router)

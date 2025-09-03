@@ -8,6 +8,7 @@ from backend.api.routers.models.requests import (
 )
 from backend.core.agents.translate.agent import translate_agent
 from backend.core.agents.translate.deps import TranslateDeps
+from backend.core.auth import CurrentUser
 from backend.core.services.streaming import format_sse, stream_agent_text
 from backend.core.services.translate import TranslateService
 from backend.db import AsyncSessionLocal
@@ -39,7 +40,9 @@ router = APIRouter(prefix="/api/translate", tags=["translate"])
         422: {"description": "Validation Error"},
     },
 )
-async def translate_url(payload: TranslateURLRequest) -> StreamingResponse:
+async def translate_url(
+    payload: TranslateURLRequest, current_user: CurrentUser
+) -> StreamingResponse:
     async def stream_generator():
         try:
             async with AsyncSessionLocal() as session:
@@ -134,7 +137,9 @@ async def translate_url(payload: TranslateURLRequest) -> StreamingResponse:
         422: {"description": "Validation Error"},
     },
 )
-async def translate_file(payload: TranslateFileRequest) -> StreamingResponse:
+async def translate_file(
+    payload: TranslateFileRequest, current_user: CurrentUser
+) -> StreamingResponse:
     async def stream_generator():
         try:
             async with AsyncSessionLocal() as session:
