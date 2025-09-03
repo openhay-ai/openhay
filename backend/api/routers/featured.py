@@ -4,6 +4,7 @@ from datetime import date, datetime
 from typing import Optional
 from urllib.parse import urlparse
 
+import logfire
 from backend.core.models import Article, DailySuggestion
 from backend.core.repositories import (
     ArticleRepository,
@@ -21,10 +22,14 @@ from sqlalchemy import text
 
 router = APIRouter(prefix="/api/featured", tags=["featured"])
 
+logfire.instrument_pydantic_ai()
+
 
 class BaseFeaturedItem(BaseModel):
-    title: str = Field(description=("Title of the article, keep it short, within 10 words."))
-    summary: str
+    title: str = Field(
+        description=("Title of the article, keep it short, within 10 words. MUST BE in Vietnamese.")
+    )
+    summary: str = Field(description="Summary of the article. MUST BE in Vietnamese.")
     source: str = Field(description="domain, e.g. vnexpress.net")
 
 
@@ -51,7 +56,8 @@ news_agent = Agent(
         "Prefer breaking news, politics, economy, social, technology.\n"
         "Return JSON list with: index (important), title"
         "1-2 sentence summary, source domain,"
-        "image URL, and optional published_at (ISO)."
+        "image URL, and optional published_at (ISO). "
+        "All content MUST BE in Vietnamese."
     ),
 )
 
@@ -153,7 +159,7 @@ async def generate_today_featured(target_day: date) -> list[FeaturedItem]:
         "site:vnexpress.net OR site:tuoitre.vn OR site:thanhnien.vn "
         "OR site:plo.vn OR site:laodong.vn"
     )
-    results = await WebDiscovery().discover(q, count=20)
+    results = await WebDiscovery().discover(q, count=20, pruned=False)
 
     docs: list[dict] = []
     for idx, r in enumerate(results):

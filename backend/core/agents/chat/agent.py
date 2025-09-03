@@ -63,7 +63,7 @@ async def fetch_url_content(urls: list[str]) -> list[dict]:
             searching for content. Example: ["https://example.com/article1", "https://example.com/article2"]
     """
     logger.debug(f"Fetching content from {len(urls)} URLs: {urls}")
-    results = await fetch_url(urls)
+    results = await fetch_url(urls, pruned=False)
     return results
 
 
