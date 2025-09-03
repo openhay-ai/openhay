@@ -17,16 +17,32 @@ from sqlalchemy import text
 
 
 def _get_cors_origins() -> list[str]:
-    # Allow localhost dev ports by default; can be overridden by env in future
-    return [
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:4173",
-        "http://127.0.0.1:4173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "*",  # keep permissive for local dev
-    ]
+    # Allow localhost dev ports by default
+    # Avoid '*' when allow_credentials is True
+    origins: list[str] = []
+    # Add Railway public domain if provided
+    railway_domain = settings.railway_public_domain
+    if railway_domain:
+        origins.append(f"https://{railway_domain}")
+    # Add explicit HOST_URL if provided
+    host_url = settings.host_url
+    if host_url:
+        origins.append(host_url)
+    # Optional comma-separated ALLOWED_ORIGINS env
+    extra = settings.allowed_origins
+    if extra:
+        for item in extra.split(","):
+            val = item.strip()
+            if val:
+                origins.append(val)
+    # De-duplicate while preserving order
+    seen = set()
+    unique: list[str] = []
+    for o in origins:
+        if o not in seen:
+            unique.append(o)
+            seen.add(o)
+    return unique
 
 
 @asynccontextmanager

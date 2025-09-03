@@ -49,6 +49,12 @@ class Settings(BaseSettings):
     collect_client_ip: bool = True
     analytics_ip_salt: Optional[str] = None
 
+    # Deployment / CORS
+    host_url: Optional[str] = None
+    railway_public_domain: Optional[str] = None
+    # Comma-separated list of extra origins
+    allowed_origins: Optional[str] = None
+
     @property
     def model(self) -> Model:
         if self.llm_provider == "openai":
