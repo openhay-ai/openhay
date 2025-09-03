@@ -152,7 +152,7 @@ class WebDiscovery:
             logger.debug("Use pruning filter")
             prune_filter = PruningContentFilter(
                 threshold=1.0,
-                threshold_type="dynamic",
+                threshold_type="fixed",
                 min_word_threshold=10,
             )
         else:
@@ -251,7 +251,15 @@ class WebDiscovery:
             return await asyncio.gather(*[_crawl_one(u) for u in urls])
 
     @logfire.instrument("web_discovery.discover")
-    async def discover(self, query: str, count: int = 5) -> list[SearchResult]:
+    async def discover(
+        self,
+        query: str,
+        count: int = 5,
+        pruned: bool = True,
+        ignore_links: bool = True,
+        ignore_images: bool = False,
+        escape_html: bool = False,
+    ) -> list[SearchResult]:
         """Search the web, then crawl results to enrich content.
 
         Args:
@@ -265,7 +273,13 @@ class WebDiscovery:
         results = [SearchResult.model_validate(r) for r in raw_results]
         # Crawl URLs and merge content into results by URL
         url_list = [r.url for r in results]
-        crawled = await self.crawl(url_list)
+        crawled = await self.crawl(
+            url_list,
+            pruned=pruned,
+            ignore_links=ignore_links,
+            ignore_images=ignore_images,
+            escape_html=escape_html,
+        )
         data_by_url = {item.get("url"): item for item in crawled}
         for r in results:
             data = data_by_url.get(r.url) or {}

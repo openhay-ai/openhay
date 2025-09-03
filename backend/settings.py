@@ -34,7 +34,40 @@ class Settings(BaseSettings):
     brave_search_url: str = "https://api.search.brave.com/res/v1/web/search"
 
     # Telemetry
-    logfire_write_token: Optional[str] = None
+    logfire_token: Optional[str] = None
+
+    # SMTP / Support
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 465
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_use_tls: bool = True
+    support_owner_email: Optional[str] = None
+    support_from_email: Optional[str] = None
+
+    # Email provider (prod: use https provider like resend)
+    email_provider: Literal["smtp", "resend"] = "smtp"
+    resend_api_key: Optional[str] = None
+
+    # Analytics / Privacy
+    collect_client_ip: bool = True
+    analytics_ip_salt: Optional[str] = None
+
+    # Deployment / CORS
+    host_url: Optional[str] = None
+    railway_public_domain: Optional[str] = None
+    # Comma-separated list of extra origins
+    allowed_origins: Optional[str] = None
+
+    # JWT Authentication
+    jwt_secret_key: Optional[str] = None
+
+    # Environment
+    env: Literal["prod", "dev"] = "prod"
+
+    # RPM
+    gemini_flash_rpm: int = 5
+    gemini_pro_rpm: int = 3
 
     @property
     def model(self) -> Model:
@@ -63,7 +96,10 @@ class Settings(BaseSettings):
                 "include_thoughts": True,
             }
         )
-        return GoogleModel(model_name=self.subagent_research_llm_model, settings=google_settings)
+        return GoogleModel(
+            model_name=self.subagent_research_llm_model,
+            settings=google_settings,
+        )
 
     @property
     def subagent_research_model(self) -> Model:
@@ -73,7 +109,10 @@ class Settings(BaseSettings):
                 "include_thoughts": True,
             }
         )
-        return GoogleModel(model_name=self.subagent_research_llm_model, settings=google_settings)
+        return GoogleModel(
+            model_name=self.subagent_research_llm_model,
+            settings=google_settings,
+        )
 
 
 settings = Settings()

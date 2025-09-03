@@ -8,7 +8,7 @@ dependencies = [
     "sqlmodel>=0.0.21",
     "SQLAlchemy>=2.0.30",
     "psycopg[binary]>=3.2",
-    "pydantic>=2.7",
+    "pydantic[email]>=2.7",
     "crawl4ai>=0.7.3",
     "pydantic-ai[logfire]>=0.7.5",
     "fastapi>=0.116.1",
@@ -16,6 +16,9 @@ dependencies = [
     "pre-commit>=4.3.0",
     "loguru>=0.7.3",
     "logfire[fastapi]>=4.3.1",
+    "PyJWT>=2.8.0",
+    "slowapi>=0.1.9",
+    "resend>=2.13.1",
 ]
 
 [tool.ruff]

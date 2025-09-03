@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from backend.core.auth import AuthUser
 from backend.core.models import Conversation, FeatureKey, FeaturePreset
 from backend.core.services.base import BaseConversationService, BinaryContentIn
 from backend.core.tools.search import fetch_url
@@ -14,7 +15,9 @@ class TranslateService(BaseConversationService):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(session)
 
-    async def create_conversation_with_preset(self) -> Conversation:
+    async def create_conversation_with_preset(
+        self, *, owner: AuthUser | None = None
+    ) -> Conversation:
         preset = (
             (
                 await self.session.execute(
@@ -31,13 +34,18 @@ class TranslateService(BaseConversationService):
         if preset is None:
             raise RuntimeError("No feature preset available")
 
-        conversation = await self.conversation_repo.create(preset)
+        feature_params = {"user_id": owner.user_id} if owner else None
+        conversation = await self.conversation_repo.create(preset, feature_params=feature_params)
         return conversation
 
     async def fetch_markdown_from_url(self, url: str) -> str | None:
         try:
             results = await fetch_url(
-                [url], ignore_links=True, ignore_images=True, escape_html=True, pruned=True
+                [url],
+                ignore_links=True,
+                ignore_images=True,
+                escape_html=True,
+                pruned=True,
             )
             if not results:
                 return None

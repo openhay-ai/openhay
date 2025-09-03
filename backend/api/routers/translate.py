@@ -8,6 +8,7 @@ from backend.api.routers.models.requests import (
 )
 from backend.core.agents.translate.agent import translate_agent
 from backend.core.agents.translate.deps import TranslateDeps
+from backend.core.auth import CurrentUser
 from backend.core.services.streaming import format_sse, stream_agent_text
 from backend.core.services.translate import TranslateService
 from backend.db import AsyncSessionLocal
@@ -39,7 +40,9 @@ router = APIRouter(prefix="/api/translate", tags=["translate"])
         422: {"description": "Validation Error"},
     },
 )
-async def translate_url(payload: TranslateURLRequest) -> StreamingResponse:
+async def translate_url(
+    payload: TranslateURLRequest, current_user: CurrentUser
+) -> StreamingResponse:
     async def stream_generator():
         try:
             async with AsyncSessionLocal() as session:
@@ -50,8 +53,16 @@ async def translate_url(payload: TranslateURLRequest) -> StreamingResponse:
                 created_new_conversation = False
                 if payload.conversation_id is not None:
                     conversation = await svc.get_conversation_by_id(payload.conversation_id)
+                    if conversation is not None:
+                        owner_id = None
+                        if isinstance(conversation.feature_params, dict):
+                            owner_id = conversation.feature_params.get("user_id")
+                        if owner_id and owner_id != current_user.user_id:
+                            from fastapi import HTTPException
+
+                            raise HTTPException(status_code=403, detail="Forbidden")
                 if conversation is None:
-                    conversation = await svc.create_conversation_with_preset()
+                    conversation = await svc.create_conversation_with_preset(owner=current_user)
                     created_new_conversation = True
 
                 if created_new_conversation:
@@ -134,7 +145,9 @@ async def translate_url(payload: TranslateURLRequest) -> StreamingResponse:
         422: {"description": "Validation Error"},
     },
 )
-async def translate_file(payload: TranslateFileRequest) -> StreamingResponse:
+async def translate_file(
+    payload: TranslateFileRequest, current_user: CurrentUser
+) -> StreamingResponse:
     async def stream_generator():
         try:
             async with AsyncSessionLocal() as session:
@@ -144,8 +157,16 @@ async def translate_file(payload: TranslateFileRequest) -> StreamingResponse:
                 created_new_conversation = False
                 if payload.conversation_id is not None:
                     conversation = await svc.get_conversation_by_id(payload.conversation_id)
+                    if conversation is not None:
+                        owner_id = None
+                        if isinstance(conversation.feature_params, dict):
+                            owner_id = conversation.feature_params.get("user_id")
+                        if owner_id and owner_id != current_user.user_id:
+                            from fastapi import HTTPException
+
+                            raise HTTPException(status_code=403, detail="Forbidden")
                 if conversation is None:
-                    conversation = await svc.create_conversation_with_preset()
+                    conversation = await svc.create_conversation_with_preset(owner=current_user)
                     created_new_conversation = True
 
                 if created_new_conversation:
@@ -180,7 +201,9 @@ async def translate_file(payload: TranslateFileRequest) -> StreamingResponse:
                     translate_agent,
                     user_prompt,
                     deps=TranslateDeps(
-                        target_lang=payload.target_lang, source_lang=payload.source_lang
+                        target_lang=payload.target_lang,
+                        source_lang=payload.source_lang,
+                        content_to_translate="",
                     ),
                     message_history=message_history,
                     on_complete=on_complete,

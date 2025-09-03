@@ -8,6 +8,7 @@ import logfire
 from backend.api.routers.models.responses import ConversationHistoryResponse
 from backend.core.agents.chat.agent import chat_agent
 from backend.core.agents.chat.deps import ChatDeps
+from backend.core.auth import CurrentUser
 from backend.core.mixins import ConversationMixin
 from backend.core.models import FeatureKey, FeaturePreset
 from backend.core.repositories.conversation import ConversationRepository
@@ -40,11 +41,13 @@ class ConversationListItem(BaseModel):
 
 
 @router.get("", response_model=dict[str, list[ConversationListItem]])
-async def list_conversations() -> dict[str, list[ConversationListItem]]:
+async def list_conversations(
+    current_user: CurrentUser,
+) -> dict[str, list[ConversationListItem]]:
     """List all conversations with a brief preview."""
     async with AsyncSessionLocal() as session:
         conversation_repo = ConversationRepository(session)
-        conversations = await conversation_repo.list_all()
+        conversations = await conversation_repo.list_by_user_id(current_user.user_id)
 
         # Avoid lazy-loads in async by prefetching preset keys
         preset_ids = {c.feature_preset_id for c in conversations}
@@ -153,7 +156,7 @@ async def list_conversations() -> dict[str, list[ConversationListItem]]:
         422: {"description": "Validation Error"},
     },
 )
-async def chat(payload: ChatRequest) -> StreamingResponse:
+async def chat(payload: ChatRequest, current_user: CurrentUser) -> StreamingResponse:
     async def stream_generator():
         try:
             async with AsyncSessionLocal() as session:
@@ -166,9 +169,15 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
                     conversation = await chat_service.get_conversation_by_id(
                         payload.conversation_id
                     )
+                    if conversation is not None:
+                        owner_id = None
+                        if isinstance(conversation.feature_params, dict):
+                            owner_id = conversation.feature_params.get("user_id")
+                        if owner_id and owner_id != current_user.user_id:
+                            raise HTTPException(status_code=403, detail="Forbidden")
                 if conversation is None:
                     create_default = chat_service.create_conversation_with_default_preset
-                    conversation = await create_default()
+                    conversation = await create_default(owner=current_user)
                     created_new_conversation = True
 
                 if created_new_conversation:
@@ -230,7 +239,7 @@ async def chat(payload: ChatRequest) -> StreamingResponse:
 
 
 @router.get("/{conversation_id}", response_model=ConversationHistoryResponse)
-async def get_conversation_history(conversation_id: UUID) -> dict:
+async def get_conversation_history(conversation_id: UUID, current_user: CurrentUser) -> dict:
     """Return flattened message history for a conversation."""
     async with AsyncSessionLocal() as session:
         chat_service = ChatService(session)
@@ -241,6 +250,17 @@ async def get_conversation_history(conversation_id: UUID) -> dict:
                 status_code=404,
                 detail="Conversation not found",
             )
+
+        # Enforce ownership: only allow if user_id matches
+        try:
+            owner_id = None
+            if isinstance(conversation.feature_params, dict):
+                owner_id = conversation.feature_params.get("user_id")
+            if owner_id and owner_id != current_user.user_id:
+                raise HTTPException(status_code=403, detail="Forbidden")
+        except Exception:
+            # On any unexpected structure, deny access for safety
+            raise HTTPException(status_code=403, detail="Forbidden")
 
         json_safe_parts = await chat_service.serialize_history(conversation_id)
 

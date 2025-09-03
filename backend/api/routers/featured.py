@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Optional
 from urllib.parse import urlparse
 
+import logfire
 from backend.core.models import Article, DailySuggestion
 from backend.core.repositories import (
     ArticleRepository,
@@ -21,10 +22,14 @@ from sqlalchemy import text
 
 router = APIRouter(prefix="/api/featured", tags=["featured"])
 
+logfire.instrument_pydantic_ai()
+
 
 class BaseFeaturedItem(BaseModel):
-    title: str = Field(description=("Title of the article, keep it short, within 10 words."))
-    summary: str
+    title: str = Field(
+        description=("Title of the article, keep it short, within 10 words. MUST BE in Vietnamese.")
+    )
+    summary: str = Field(description="Summary of the article. MUST BE in Vietnamese.")
     source: str = Field(description="domain, e.g. vnexpress.net")
 
 
@@ -51,7 +56,8 @@ news_agent = Agent(
         "Prefer breaking news, politics, economy, social, technology.\n"
         "Return JSON list with: index (important), title"
         "1-2 sentence summary, source domain,"
-        "image URL, and optional published_at (ISO)."
+        "image URL, and optional published_at (ISO). "
+        "All content MUST BE in Vietnamese."
     ),
 )
 
@@ -63,13 +69,13 @@ async def get_today_featured(
     # Use local time to avoid timezone issues
     now = datetime.now()
     today = now.date()
-    yesterday = today - timedelta(days=1)
 
     async with AsyncSessionLocal() as session:
         sug_repo = DailySuggestionRepository(session)
         art_repo = ArticleRepository(session)
 
         existing_today = await sug_repo.list_for_day(today)
+        last_day = await sug_repo.get_last_day()
 
         # Decide which day to use for response and whether to kick off/wait
         if existing_today:
@@ -108,15 +114,15 @@ async def get_today_featured(
                             )
 
                             # Fallback to yesterday if not ready in time
-                            yesterday_featured = await sug_repo.list_for_day(yesterday)
+                            yesterday_featured = await sug_repo.list_for_day(last_day)
                             cnt = len(yesterday_featured)
-                            logger.info(f"Timeout; returning {cnt} items for {yesterday}")
+                            logger.info(f"Timeout; returning {cnt} items for {last_day}")
                             use_suggestions = yesterday_featured
             else:
                 # Before cutoff, do not generate yet; use yesterday's
-                yesterday_featured = await sug_repo.list_for_day(yesterday)
+                yesterday_featured = await sug_repo.list_for_day(last_day)
                 cnt = len(yesterday_featured)
-                msg = f"Returning {cnt} featured items for {yesterday}"
+                msg = f"Returning {cnt} featured items for {last_day} (before cutoff)"
                 logger.info(msg)
                 use_suggestions = yesterday_featured
 
@@ -153,7 +159,7 @@ async def generate_today_featured(target_day: date) -> list[FeaturedItem]:
         "site:vnexpress.net OR site:tuoitre.vn OR site:thanhnien.vn "
         "OR site:plo.vn OR site:laodong.vn"
     )
-    results = await WebDiscovery().discover(q, count=20)
+    results = await WebDiscovery().discover(q, count=20, pruned=False)
 
     docs: list[dict] = []
     for idx, r in enumerate(results):

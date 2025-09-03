@@ -2,6 +2,8 @@ import { Languages, History, CircleHelp, Search, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import logo from "@/assets/logo-aihay.png";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import SupportModal from "@/components/SupportModal";
 
 interface Item {
   label: string;
@@ -12,13 +14,12 @@ interface Item {
 
 const primaryItems: Array<Item> = [];
 
-const secondaryItems: Item[] = [
-  { label: "Hỗ trợ", icon: CircleHelp },
-];
+const secondaryItems: Item[] = [{ label: "Hỗ trợ", icon: CircleHelp }];
 
 export const SidebarNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const [supportOpen, setSupportOpen] = useState(false);
 
   // Build items here to access navigate for translate item
   const items: Array<Item> = [
@@ -34,7 +35,12 @@ export const SidebarNav = () => {
   return (
     <aside className="hidden md:flex fixed inset-y-0 left-0 w-64 flex-col border-r bg-sidebar text-sidebar-foreground z-10">
       <div className="flex items-center gap-1 px-4 py-4 border-b">
-        <img src={logo} alt="OpenHay Logo" className="size-12 rounded" loading="lazy" />
+        <img
+          src={logo}
+          alt="OpenHay Logo"
+          className="size-12 rounded"
+          loading="lazy"
+        />
         <span className="font-semibold">OpenHay</span>
       </div>
 
@@ -48,7 +54,9 @@ export const SidebarNav = () => {
               const linkType = new URLSearchParams(linkUrl.search).get("type");
               const currentParams = new URLSearchParams(location.search);
               const currentType = currentParams.get("type");
-              const onRootOrThread = location.pathname === "/" || location.pathname.startsWith("/t/");
+              const onRootOrThread =
+                location.pathname === "/" ||
+                location.pathname.startsWith("/t/");
 
               // Default mode (no type): active on root or thread when no type set
               if (linkUrl.pathname === "/" && !linkType) {
@@ -93,10 +101,14 @@ export const SidebarNav = () => {
                     <span>{item.label}</span>
                   </button>
                 ) : (
-                  <span className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm",
-                    active ? "bg-sidebar-accent text-sidebar-foreground" : undefined
-                  )}>
+                  <span
+                    className={cn(
+                      "flex items-center gap-3 rounded-md px-3 py-2 text-sm",
+                      active
+                        ? "bg-sidebar-accent text-sidebar-foreground"
+                        : undefined
+                    )}
+                  >
                     <Icon className="size-4" />
                     <span>{item.label}</span>
                   </span>
@@ -113,18 +125,24 @@ export const SidebarNav = () => {
             const Icon = item.icon;
             return (
               <li key={item.label}>
-                <a
-                  href="#"
-                  className="flex items-center gap-3 rounded-md px-3 py-2 text-sm hover:bg-sidebar-accent"
+                <button
+                  type="button"
+                  onClick={() => setSupportOpen(true)}
+                  className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-sm hover:bg-sidebar-accent"
                 >
                   <Icon className="size-4" />
                   <span>{item.label}</span>
-                </a>
+                </button>
               </li>
             );
           })}
         </ul>
       </nav>
+      <SupportModal
+        open={supportOpen}
+        onOpenChange={setSupportOpen}
+        ownerEmail="quangphamm1902@gmail.com"
+      />
     </aside>
   );
 };

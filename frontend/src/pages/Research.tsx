@@ -3,13 +3,14 @@ import PromptInput from "@/components/PromptInput";
 import { Markdown } from "@/components/Markdown";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { ChevronDown, Loader2, Clock } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getResearchSseUrl } from "@/lib/api";
 import SourceCard from "@/components/SourceCard";
 import { normalizeUrlForMatch } from "@/lib/utils";
 import ChatMessage from "@/components/ChatMessage";
+import { withAuthHeaders } from "@/lib/auth";
 
 type ThinkingEntry = { id: string; content: string; open: boolean; ts: number };
 
@@ -50,6 +51,104 @@ const Research = () => {
 
   const endRef = useRef<HTMLDivElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const location = useLocation();
+  const lastHrefRef = useRef<string>(window.location.href);
+  useEffect(() => {
+    lastHrefRef.current = window.location.href;
+  }, [location]);
+
+  // Guard in-app navigation while streaming (for BrowserRouter)
+  useEffect(() => {
+    if (!isStreaming) return;
+
+    const message =
+      "Nghiên cứu đang chạy. Rời trang bây giờ sẽ làm mất tiến trình và kết quả. Bạn có chắc muốn rời đi?";
+
+    const isModifiedEvent = (e: MouseEvent) =>
+      e.metaKey || e.altKey || e.ctrlKey || e.shiftKey || (e.button && e.button !== 0);
+
+    const findAnchor = (el: Element | null): HTMLAnchorElement | null => {
+      let cur: Element | null = el;
+      while (cur && cur !== document.body) {
+        if (cur instanceof HTMLAnchorElement) return cur as HTMLAnchorElement;
+        cur = cur.parentElement;
+      }
+      return null;
+    };
+
+    const onDocumentClick = (e: MouseEvent) => {
+      if (!isStreaming) return;
+      if (e.defaultPrevented) return;
+      if (isModifiedEvent(e)) return;
+      const anchor = findAnchor(e.target as Element);
+      if (!anchor) return;
+      if (anchor.target && anchor.target.toLowerCase() === "_blank") return;
+      if (anchor.hasAttribute("download")) return;
+      const hrefAttr = anchor.getAttribute("href");
+      if (!hrefAttr || hrefAttr.startsWith("#")) return;
+      const url = new URL(hrefAttr, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      if (url.href === window.location.href) return;
+      const ok = window.confirm(message);
+      if (!ok) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
+    const onPopState = () => {
+      const ok = window.confirm(message);
+      if (!ok) {
+        // revert back to previous URL
+        try {
+          window.history.pushState(null, "", lastHrefRef.current);
+        } catch {}
+      }
+    };
+
+    document.addEventListener("click", onDocumentClick, true);
+    window.addEventListener("popstate", onPopState);
+
+    // Patch pushState/replaceState to catch programmatic navigations
+    const hist: any = window.history as any;
+    const originalPush = hist.pushState?.bind(hist);
+    const originalReplace = hist.replaceState?.bind(hist);
+    if (originalPush) {
+      hist.pushState = function (...args: any[]) {
+        const ok = window.confirm(message);
+        if (!ok) return;
+        return originalPush(...args);
+      };
+    }
+    if (originalReplace) {
+      hist.replaceState = function (...args: any[]) {
+        const ok = window.confirm(message);
+        if (!ok) return;
+        return originalReplace(...args);
+      };
+    }
+
+    return () => {
+      document.removeEventListener("click", onDocumentClick, true);
+      window.removeEventListener("popstate", onPopState);
+      if (originalPush) hist.pushState = originalPush;
+      if (originalReplace) hist.replaceState = originalReplace;
+    };
+  }, [isStreaming, location]);
+
+  useEffect(() => {
+    if (!isStreaming) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      const message =
+        "Nghiên cứu đang chạy. Rời trang bây giờ sẽ làm mất tiến trình và kết quả.";
+      e.preventDefault();
+      e.returnValue = message;
+      return message;
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isStreaming]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -93,12 +192,13 @@ const Research = () => {
     setIsStreaming(true);
 
     try {
-      const res = await fetch(getResearchSseUrl(), {
+      const init = await withAuthHeaders({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: value }),
         signal: ac.signal,
       });
+      const res = await fetch(getResearchSseUrl(), init);
       if (!res.ok || !res.body) throw new Error(`Bad response: ${res.status}`);
 
       const reader = res.body.getReader();

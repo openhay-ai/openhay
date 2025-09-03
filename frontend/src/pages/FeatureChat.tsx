@@ -10,9 +10,15 @@ import {
 import { useEffect, useRef, useState, useMemo } from "react";
 import { normalizeUrlForMatch } from "@/lib/utils";
 // no slug needed; route is /t/{uuid}
-import { getChatSseUrl, getChatHistoryUrl, getTranslateFileSseEndpoint, getTranslateUrlSseEndpoint } from "@/lib/api";
+import {
+  getChatSseUrl,
+  getChatHistoryUrl,
+  getTranslateFileSseEndpoint,
+  getTranslateUrlSseEndpoint,
+} from "@/lib/api";
 import ChatMessage from "@/components/ChatMessage";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { authFetch, withAuthHeaders } from "@/lib/auth";
 
 type ChatMedia = {
   src: string;
@@ -95,13 +101,15 @@ const FeatureChat = () => {
   const [sourceExpanded, setSourceExpanded] = useState<Record<string, boolean>>(
     {}
   );
-  const [thinkingExpanded, setThinkingExpanded] = useState<Record<string, boolean>>(
-    {}
-  );
+  const [thinkingExpanded, setThinkingExpanded] = useState<
+    Record<string, boolean>
+  >({});
   const [overlayHeight, setOverlayHeight] = useState<number>(120);
-  const [errorNotice, setErrorNotice] = useState<
-    { title?: string; message: string; retryAfterSec?: number } | null
-  >(null);
+  const [errorNotice, setErrorNotice] = useState<{
+    title?: string;
+    message: string;
+    retryAfterSec?: number;
+  } | null>(null);
   const lastAttemptRef = useRef<{ value: string; files?: File[] } | null>(null);
   // const [showTranslate, setShowTranslate] = useState<boolean>(false);
 
@@ -181,8 +189,22 @@ const FeatureChat = () => {
     const preload = st.preloadMessages as ChatMessage[] | undefined;
     const openTranslate = st.openTranslate as boolean | undefined;
     const translateRun = st.translateRun as
-      | { kind: "link"; url: string; source_lang: string; target_lang: string; assistantId: string; message?: string }
-      | { kind: "file"; media: any[]; source_lang: string; target_lang: string; assistantId: string; message?: string }
+      | {
+          kind: "link";
+          url: string;
+          source_lang: string;
+          target_lang: string;
+          assistantId: string;
+          message?: string;
+        }
+      | {
+          kind: "file";
+          media: any[];
+          source_lang: string;
+          target_lang: string;
+          assistantId: string;
+          message?: string;
+        }
       | undefined;
     if (threadId && preload && preload.length > 0) {
       setMessages(preload);
@@ -207,19 +229,46 @@ const FeatureChat = () => {
             const ac = new AbortController();
             abortRef.current = ac;
             setIsStreaming(true);
-            const endpoint = translateRun.kind === "link" ? getTranslateUrlSseEndpoint() : getTranslateFileSseEndpoint();
+            const endpoint =
+              translateRun.kind === "link"
+                ? getTranslateUrlSseEndpoint()
+                : getTranslateFileSseEndpoint();
             const message = translateRun.message;
-            const body = translateRun.kind === "link"
-              ? { url: translateRun.url, source_lang: translateRun.source_lang, target_lang: translateRun.target_lang, message }
-              : { media: (translateRun as any).media, source_lang: translateRun.source_lang, target_lang: translateRun.target_lang, message };
-            const res = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: ac.signal });
-            if (!res.ok || !res.body) throw new Error(`Bad response: ${res.status}`);
+            const body =
+              translateRun.kind === "link"
+                ? {
+                    url: translateRun.url,
+                    source_lang: translateRun.source_lang,
+                    target_lang: translateRun.target_lang,
+                    message,
+                  }
+                : {
+                    media: (translateRun as any).media,
+                    source_lang: translateRun.source_lang,
+                    target_lang: translateRun.target_lang,
+                    message,
+                  };
+            const init = await withAuthHeaders({
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+              signal: ac.signal,
+            });
+            const res = await fetch(endpoint, init);
+            if (!res.ok || !res.body)
+              throw new Error(`Bad response: ${res.status}`);
             const reader = res.body.getReader();
             const decoder: any = new TextDecoder("utf-8");
             let buffer = "";
             let createdConversationId: string | null = null;
             const commitChunk = (chunkContent: string) => {
-              setMessages((prev) => prev.map((m) => (m.id === translateRun.assistantId ? { ...m, content: m.content + chunkContent } : m)));
+              setMessages((prev) =>
+                prev.map((m) =>
+                  m.id === translateRun.assistantId
+                    ? { ...m, content: m.content + chunkContent }
+                    : m
+                )
+              );
             };
             while (true) {
               const { done, value } = await reader.read();
@@ -234,26 +283,36 @@ const FeatureChat = () => {
                 let eventName = "message";
                 const dataLines: string[] = [];
                 for (const line of lines) {
-                  if (line.startsWith("event:")) eventName = line.slice(6).trim();
-                  else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+                  if (line.startsWith("event:"))
+                    eventName = line.slice(6).trim();
+                  else if (line.startsWith("data:"))
+                    dataLines.push(line.slice(5).trim());
                 }
                 const dataStr = dataLines.join("\n");
                 if (eventName === "ai_message") {
                   try {
-                    const parsed = JSON.parse(dataStr) as { chunk?: { content?: string } };
+                    const parsed = JSON.parse(dataStr) as {
+                      chunk?: { content?: string };
+                    };
                     const chunk = parsed?.chunk?.content ?? "";
                     if (chunk) commitChunk(chunk);
                   } catch {}
                 } else if (eventName === "conversation_created") {
                   try {
-                    const parsed = JSON.parse(dataStr) as { conversation_id?: string };
-                    if (parsed?.conversation_id) createdConversationId = parsed.conversation_id;
+                    const parsed = JSON.parse(dataStr) as {
+                      conversation_id?: string;
+                    };
+                    if (parsed?.conversation_id)
+                      createdConversationId = parsed.conversation_id;
                   } catch {}
                 }
               }
             }
             if (createdConversationId) {
-              navigate(`/t/${createdConversationId}`, { replace: true, state: { preloadMessages: messagesRef.current } });
+              navigate(`/t/${createdConversationId}`, {
+                replace: true,
+                state: { preloadMessages: messagesRef.current },
+              });
             }
           } catch {
             // ignore for now
@@ -268,7 +327,7 @@ const FeatureChat = () => {
 
     (async () => {
       try {
-        const res = await fetch(getChatHistoryUrl(canonicalId));
+        const res = await authFetch(getChatHistoryUrl(canonicalId));
         if (!res.ok) return;
         const data = (await res.json()) as {
           conversation_id: string;
@@ -538,12 +597,13 @@ const FeatureChat = () => {
       };
       setMessages((prev) => [...prev, userMsg!, assistantMsg!]);
 
-      const res = await fetch(getChatSseUrl(), {
+      const init = await withAuthHeaders({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
         signal: ac.signal,
       });
+      const res = await fetch(getChatSseUrl(), init);
       if (!res.ok || !res.body) {
         throw new Error(`Bad response: ${res.status}`);
       }
@@ -660,8 +720,13 @@ const FeatureChat = () => {
               const detailsStr =
                 typeof err?.details === "string" ? (err.details as string) : "";
               // Try to extract retry delay from provider details, e.g. "retryDelay': '55s'"
-              const m = detailsStr.match(/retryDelay['\"]?\s*:\s*['\"](?<sec>\d+)s['\"]/);
-              const sec = m && m.groups && m.groups.sec ? Number(m.groups.sec) : undefined;
+              const m = detailsStr.match(
+                /retryDelay['\"]?\s*:\s*['\"](?<sec>\d+)s['\"]/
+              );
+              const sec =
+                m && m.groups && m.groups.sec
+                  ? Number(m.groups.sec)
+                  : undefined;
               const friendly =
                 typeof sec === "number"
                   ? `Hệ thống đang quá tải tạm thời. Vui lòng thử lại sau khoảng ${sec} giây.`
@@ -689,7 +754,8 @@ const FeatureChat = () => {
                 ac.abort();
               } catch {}
             } catch {
-              const friendly = "Đã xảy ra lỗi khi xử lý phản hồi. Vui lòng thử lại.";
+              const friendly =
+                "Đã xảy ra lỗi khi xử lý phản hồi. Vui lòng thử lại.";
               sseErrorInfo = { message: friendly };
               setErrorNotice({ message: friendly });
               sseError = new Error(friendly);
@@ -786,14 +852,17 @@ const FeatureChat = () => {
                   const expanded = isTool
                     ? !!sourceExpanded[m.id]
                     : isThinking
-                    ? (thinkingExpanded[m.id] ?? true)
+                    ? thinkingExpanded[m.id] ?? true
                     : undefined;
                   const onToggleExpanded = isTool
                     ? (next: boolean) =>
                         setSourceExpanded((prev) => ({ ...prev, [m.id]: next }))
                     : isThinking
                     ? (next: boolean) =>
-                        setThinkingExpanded((prev) => ({ ...prev, [m.id]: next }))
+                        setThinkingExpanded((prev) => ({
+                          ...prev,
+                          [m.id]: next,
+                        }))
                     : undefined;
                   return (
                     <ChatMessage
@@ -811,15 +880,18 @@ const FeatureChat = () => {
               {/* Error banner near input */}
               {errorNotice ? (
                 <Alert variant="destructive">
-                  <AlertTitle>{errorNotice.title ?? "Xin lỗi, hệ thống đang bận"}</AlertTitle>
-                  <AlertDescription>
-                    {errorNotice.message}
-                  </AlertDescription>
+                  <AlertTitle>
+                    {errorNotice.title ?? "Xin lỗi, hệ thống đang bận"}
+                  </AlertTitle>
+                  <AlertDescription>{errorNotice.message}</AlertDescription>
                   <div className="mt-3 flex items-center gap-2">
                     <Button onClick={retryLast} disabled={isStreaming}>
                       Thử lại
                     </Button>
-                    <Button variant="ghost" onClick={() => setErrorNotice(null)}>
+                    <Button
+                      variant="ghost"
+                      onClick={() => setErrorNotice(null)}
+                    >
                       Đóng
                     </Button>
                   </div>

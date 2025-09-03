@@ -61,7 +61,7 @@ async def web_fetch(urls: list[str], timeout: int = 30) -> list[dict]:
         - Use for high-quality sources identified through web_search
     """
     svc = WebDiscovery()
-    crawled = await svc.crawl(urls=urls, timeout=timeout)
+    crawled = await svc.crawl(urls=urls, timeout=timeout, pruned=False)
     return crawled
 
 
