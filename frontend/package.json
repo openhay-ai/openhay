@@ -8,7 +8,8 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "start:caddy": "caddy run --config Caddyfile --adapter caddyfile"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
