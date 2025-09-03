@@ -15,6 +15,9 @@ import laptop from "@/assets/thumb-laptop.jpg";
 import nature from "@/assets/thumb-nature.jpg";
 import { cn } from "@/lib/utils";
 
+import { getFeaturedUrl } from "@/lib/api";
+import { authFetch } from "@/lib/auth";
+
 type FeaturedItem = { title: string; img?: string; url?: string };
 const fallbackFeatured: FeaturedItem[] = [
   { title: "Tàu Trung Quốc tự đâm vào nhau", img: city },
@@ -22,7 +25,6 @@ const fallbackFeatured: FeaturedItem[] = [
   { title: "Tài khoản giao thông là gì", img: nature },
   { title: "Rừng Amazon đang bị cháy", img: nature },
 ];
-import { getFeaturedUrl } from "@/lib/api";
 
 const chips = [
   "Vượt đèn vàng có bị phạt không",
@@ -51,7 +53,7 @@ const Index = () => {
   useEffect(() => {
     const run = async () => {
       try {
-        const res = await fetch(getFeaturedUrl());
+        const res = await authFetch(getFeaturedUrl());
         if (!res.ok) throw new Error("Failed to fetch featured");
         const data = await res.json();
         const items: { title: string; url?: string; image_url?: string }[] = data.items || [];

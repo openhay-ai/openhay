@@ -42,10 +42,19 @@ def _get_cors_origins() -> list[str]:
             val = item.strip()
             if val:
                 origins.append(val)
+    # Normalize: strip trailing slashes and whitespace
+    normalized: list[str] = []
+    for o in origins:
+        try:
+            oo = o.strip().rstrip("/")
+        except Exception:
+            oo = o
+        if oo:
+            normalized.append(oo)
     # De-duplicate while preserving order
     seen = set()
     unique: list[str] = []
-    for o in origins:
+    for o in normalized:
         if o not in seen:
             unique.append(o)
             seen.add(o)

@@ -13,6 +13,7 @@ import { normalizeUrlForMatch } from "@/lib/utils";
 import { getChatSseUrl, getChatHistoryUrl, getTranslateFileSseEndpoint, getTranslateUrlSseEndpoint } from "@/lib/api";
 import ChatMessage from "@/components/ChatMessage";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { authFetch, withAuthHeaders } from "@/lib/auth";
 
 type ChatMedia = {
   src: string;
@@ -268,7 +269,7 @@ const FeatureChat = () => {
 
     (async () => {
       try {
-        const res = await fetch(getChatHistoryUrl(canonicalId));
+        const res = await authFetch(getChatHistoryUrl(canonicalId));
         if (!res.ok) return;
         const data = (await res.json()) as {
           conversation_id: string;
@@ -538,12 +539,13 @@ const FeatureChat = () => {
       };
       setMessages((prev) => [...prev, userMsg!, assistantMsg!]);
 
-      const res = await fetch(getChatSseUrl(), {
+      const init = await withAuthHeaders({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
         signal: ac.signal,
       });
+      const res = await fetch(getChatSseUrl(), init);
       if (!res.ok || !res.body) {
         throw new Error(`Bad response: ${res.status}`);
       }

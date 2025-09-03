@@ -10,6 +10,7 @@ import { getResearchSseUrl } from "@/lib/api";
 import SourceCard from "@/components/SourceCard";
 import { normalizeUrlForMatch } from "@/lib/utils";
 import ChatMessage from "@/components/ChatMessage";
+import { withAuthHeaders } from "@/lib/auth";
 
 type ThinkingEntry = { id: string; content: string; open: boolean; ts: number };
 
@@ -93,12 +94,13 @@ const Research = () => {
     setIsStreaming(true);
 
     try {
-      const res = await fetch(getResearchSseUrl(), {
+      const init = await withAuthHeaders({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: value }),
         signal: ac.signal,
       });
+      const res = await fetch(getResearchSseUrl(), init);
       if (!res.ok || !res.body) throw new Error(`Bad response: ${res.status}`);
 
       const reader = res.body.getReader();

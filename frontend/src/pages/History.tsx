@@ -2,6 +2,7 @@ import SidebarNav from "@/components/layout/SidebarNav";
 import { useEffect, useState } from "react";
 import { getConversationsUrl } from "@/lib/api";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { authFetch } from "@/lib/auth";
 
 type ConversationListItem = {
   id: string;
@@ -21,7 +22,7 @@ const History = () => {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(getConversationsUrl());
+        const res = await authFetch(getConversationsUrl());
         if (!res.ok) throw new Error(String(res.status));
         const data = (await res.json()) as { items: ConversationListItem[] };
         setItems(Array.isArray(data.items) ? data.items : []);
