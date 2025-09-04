@@ -61,6 +61,9 @@ class Settings(BaseSettings):
 
     # JWT Authentication
     jwt_secret_key: Optional[str] = None
+    access_token_expire_days: int = 7
+    guest_token_expire_hours: int = 24
+    refresh_token_expire_days: int = 30
 
     # Environment
     env: Literal["prod", "dev"] = "prod"
