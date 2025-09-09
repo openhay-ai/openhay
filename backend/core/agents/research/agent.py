@@ -56,7 +56,7 @@ async def web_search(query: str, max_results: int = 10) -> list[dict]:
     return [sr.model_dump() for sr in search_results]
 
 
-async def web_fetch(urls: list[str], timeout: int = 30) -> list[dict]:
+async def web_fetch(urls: list[str]) -> list[dict]:
     """Retrieve the complete content of a webpage.
 
     This tool fetches the full content of webpages and should be used to get
@@ -67,7 +67,6 @@ async def web_fetch(urls: list[str], timeout: int = 30) -> list[dict]:
     Args:
         urls (list[str]): The complete URLs of the webpages to fetch. Must be
             valid HTTP/HTTPS URLs.
-        timeout (int, optional): Request timeout in seconds. Defaults to 30.
 
     Note:
         - Always use this after web_search to get complete information
@@ -76,7 +75,7 @@ async def web_fetch(urls: list[str], timeout: int = 30) -> list[dict]:
         - Use for high-quality sources identified through web_search
     """
     svc = WebDiscovery()
-    crawled = await svc.crawl(urls=urls, timeout=timeout, pruned=False, ignore_images=True)
+    crawled = await svc.crawl(urls=urls, pruned=False, ignore_images=True)
     return crawled
 
 
