@@ -1,65 +1,21 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Optional
 from urllib.parse import urlparse
 
-import logfire
+from backend.core.agents.discover.agent import discover_best_posts
 from backend.core.models import Article, DailySuggestion
 from backend.core.repositories import (
     ArticleRepository,
     ArticleSourceRepository,
     DailySuggestionRepository,
 )
-from backend.core.services.web_discovery import WebDiscovery
 from backend.db import AsyncSessionLocal
-from backend.settings import settings
 from fastapi import APIRouter, BackgroundTasks
 from loguru import logger
-from pydantic import BaseModel, Field, HttpUrl
-from pydantic_ai import Agent
 from sqlalchemy import text
 
 router = APIRouter(prefix="/api/featured", tags=["featured"])
-
-logfire.instrument_pydantic_ai()
-
-
-class BaseFeaturedItem(BaseModel):
-    title: str = Field(
-        description=("Title of the article, keep it short, within 10 words. MUST BE in Vietnamese.")
-    )
-    summary: str = Field(description="Summary of the article. MUST BE in Vietnamese.")
-    source: str = Field(description="domain, e.g. vnexpress.net")
-
-
-class FeaturedItem(BaseFeaturedItem):
-    url: HttpUrl
-    published_at: Optional[datetime] = None
-    image_url: Optional[HttpUrl] = Field(
-        description="From the content, select the image URL that you think is most relevant."
-    )
-
-
-class LlmFeaturedItem(BaseFeaturedItem):
-    index: int = Field(description="Index of the article in the list. Starts from 0.")
-
-
-# Agent to extract top articles from crawled pages
-news_agent = Agent(
-    settings.model,
-    output_type=list[LlmFeaturedItem],
-    system_prompt=(
-        "You are a news curator for Vietnam.\n"
-        "Given a list of crawled pages (title, site, url, content), "
-        "pick the TOP 10 most important news in Vietnam for a given day.\n"
-        "Prefer breaking news, politics, economy, social, technology.\n"
-        "Return JSON list with: index (important), title"
-        "1-2 sentence summary, source domain,"
-        "image URL, and optional published_at (ISO). "
-        "All content MUST BE in Vietnamese."
-    ),
-)
 
 
 @router.get("")
@@ -97,34 +53,74 @@ async def get_today_featured(
                         acquired = bool(res.scalar())
 
                         if acquired:
-                            logger.info(f"Acquired lock, generating featured for {today}")
+                            logger.info("Acquired lock; schedule generation")
                             try:
-                                await generate_today_featured(today)
+                                # Trigger background generation and return
+                                # latest available items
+                                background_tasks.add_task(
+                                    generate_today_featured,
+                                    today,
+                                )
                             finally:
                                 await conn.execute(
                                     text("SELECT pg_advisory_unlock(hashtext(:k)::bigint)"),
                                     {"k": lock_key},
                                 )
                             use_suggestions = await sug_repo.list_for_day(today)
-                            cnt = len(use_suggestions)
-                            logger.info(f"Returning {cnt} items for {today}")
+                            if use_suggestions:
+                                cnt = len(use_suggestions)
+                                logger.info(
+                                    "Returning {} items for {}",
+                                    cnt,
+                                    today,
+                                )
+                            else:
+                                if last_day:
+                                    yesterday_featured = await sug_repo.list_for_day(last_day)
+                                    cnt = len(yesterday_featured)
+                                    logger.info(
+                                        "Not ready; return {} for {}",
+                                        cnt,
+                                        last_day,
+                                    )
+                                    use_suggestions = yesterday_featured
+                                else:
+                                    logger.info(
+                                        "No previous featured available; returning empty list"
+                                    )
+                                    use_suggestions = []
                         else:
-                            logger.info(
-                                f"Worker generating for {today} waiting...",
-                            )
+                            logger.info("Worker generating; waiting...")
 
-                            # Fallback to yesterday if not ready in time
-                            yesterday_featured = await sug_repo.list_for_day(last_day)
-                            cnt = len(yesterday_featured)
-                            logger.info(f"Timeout; returning {cnt} items for {last_day}")
-                            use_suggestions = yesterday_featured
+                            # Fallback to latest available day if not ready
+                            if last_day:
+                                yesterday_featured = await sug_repo.list_for_day(last_day)
+                                cnt = len(yesterday_featured)
+                                logger.info(
+                                    "Timeout; return {} for {}",
+                                    cnt,
+                                    last_day,
+                                )
+                                use_suggestions = yesterday_featured
+                            else:
+                                logger.info("No previous featured available; returning empty list")
+                                use_suggestions = []
             else:
                 # Before cutoff, do not generate yet; use yesterday's
-                yesterday_featured = await sug_repo.list_for_day(last_day)
-                cnt = len(yesterday_featured)
-                msg = f"Returning {cnt} featured items for {last_day} (before cutoff)"
-                logger.info(msg)
-                use_suggestions = yesterday_featured
+                if last_day:
+                    yesterday_featured = await sug_repo.list_for_day(last_day)
+                    cnt = len(yesterday_featured)
+                    logger.info(
+                        "Returning {} featured items for {} (before cutoff)",
+                        cnt,
+                        last_day,
+                    )
+                    use_suggestions = yesterday_featured
+                else:
+                    logger.info(
+                        "No previous featured available before cutoff; returning empty list"
+                    )
+                    use_suggestions = []
 
         # Join with articles by explicit IDs to avoid filtering by fetched_at
         article_ids = [s.article_id for s in use_suggestions]
@@ -141,7 +137,7 @@ async def get_today_featured(
                     "title": a.title,
                     "url": a.url,
                     "image_url": a.image_url,
-                    "summary": s.reason or a.content_text[:200],
+                    "summary": s.reason or a.content_text,
                     "source": urlparse(a.url).hostname or "",
                     "published_at": (a.published_at.isoformat() if a.published_at else None),
                 }
@@ -150,52 +146,30 @@ async def get_today_featured(
         return {"items": items}
 
 
-async def generate_today_featured(target_day: date) -> list[FeaturedItem]:
-    # Crawl from VN famous sites via Brave + crawler
-    # use Vietnamese query with date
-    q = (
-        "Tin tức Việt Nam ngày "
-        f"{target_day.strftime('%d/%m/%Y')} "
-        "site:vnexpress.net OR site:tuoitre.vn OR site:thanhnien.vn "
-        "OR site:plo.vn OR site:laodong.vn"
-    )
-    results = await WebDiscovery().discover(q, count=20, pruned=False)
+async def generate_today_featured(target_day: date) -> list[dict]:
+    # Use discover agent to collect best posts from configured sources
+    discovered = await discover_best_posts()
 
-    docs: list[dict] = []
-    for idx, r in enumerate(results):
-        docs.append(
+    # Deduplicate by URL while preserving order
+    seen_urls: set[str] = set()
+    items: list[dict] = []
+    for r in discovered:
+        url = (r.get("url") or "").strip()
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        items.append(
             {
-                "index": idx,
-                "title": r.title,
-                "url": r.url,
-                "image_url": r.image_url,
-                "content": r.content or r.description,
+                "url": url,
+                "title": r.get("title") or "",
+                "image_url": r.get("image_url") or None,
+                "content": r.get("content") or "",
+                "description": r.get("description") or "",
+                "metadata": r.get("metadata") or {},
             }
         )
 
-    # Ask the agent to select top 10
-    formatted_prompt = (
-        "Pick the top 10 most important news in Vietnam for a given day.\n"
-        "Return in the correct JSON format.\n"
-        f"Today: {target_day.isoformat()}\n"
-        f"Data: {docs!r}"
-    )
-    result = await news_agent.run(formatted_prompt)
-    selected_items: list[LlmFeaturedItem] = list(result.output)[:10]
-
-    items: list[FeaturedItem] = []
-    for doc in docs:
-        for si in selected_items:
-            if si.index == doc.get("index"):
-                # Extract the summary and title from LLM
-                # But every other fields are kept as original
-                doc["summary"] = si.summary
-                doc["title"] = si.title
-                doc["source"] = si.source
-                del doc["index"]
-                items.append(FeaturedItem.model_validate(doc))
-
-    # Persist
+    # Persist all discovered items
     async with AsyncSessionLocal() as session:
         src_repo = ArticleSourceRepository(session)
         art_repo = ArticleRepository(session)
@@ -204,21 +178,22 @@ async def generate_today_featured(target_day: date) -> list[FeaturedItem]:
         articles_to_store: list[Article] = []
         suggestions_to_store: list[DailySuggestion] = []
 
-        for idx, it in enumerate(items):
-            domain = urlparse(str(it.url)).hostname or ""
+        for it in items:
+            domain = urlparse(str(it["url"]).strip()).hostname or ""
             src = await src_repo.get_or_create(domain=domain, name=domain)
             art = Article(
                 source_id=src.id,
-                url=str(it.url),
-                title=it.title,
+                url=str(it["url"]),
+                title=str(it.get("title") or ""),
                 author=None,
-                content_text=it.summary,
+                content_text=str(it.get("content") or it.get("description") or ""),
                 content_html=None,
                 lang="vi",
                 category=None,
                 tags=None,
-                image_url=str(it.image_url) if it.image_url else None,
-                published_at=it.published_at,
+                image_url=(str(it.get("image_url")) if it.get("image_url") else None),
+                published_at=None,
+                metadata_=it.get("metadata") or {},
             )
             articles_to_store.append(art)
 
@@ -227,7 +202,7 @@ async def generate_today_featured(target_day: date) -> list[FeaturedItem]:
         # Map back to suggestions by URL
         by_url = {a.url: a for a in stored_articles}
         for idx, it in enumerate(items, start=1):
-            a = by_url.get(str(it.url))
+            a = by_url.get(str(it["url"]))
             if not a:
                 continue
             suggestions_to_store.append(
@@ -235,7 +210,8 @@ async def generate_today_featured(target_day: date) -> list[FeaturedItem]:
                     article_id=a.id,
                     suggestion_date=target_day,
                     rank=idx,
-                    reason=it.summary,
+                    # Fallback to the full content for reason
+                    reason=str(it.get("content") or it.get("description") or ""),
                 )
             )
 

@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from time import monotonic
-from typing import Iterable, Optional
-from urllib.parse import urljoin
+from typing import Iterable, Optional, TypedDict
 
 import logfire
 from aiohttp import ClientSession
 from backend.settings import settings
 from crawl4ai import AsyncWebCrawler, CrawlerRunConfig
 from crawl4ai.content_filter_strategy import PruningContentFilter
+from crawl4ai.deep_crawling import BFSDeepCrawlStrategy, DeepCrawlStrategy
 from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from loguru import logger
 from pydantic import BaseModel
@@ -41,6 +40,15 @@ class SearchResult(BaseModel):
     image_url: Optional[str] = None
 
 
+class CrawlResult(TypedDict):
+    url: str
+    title: str
+    description: str
+    content: str
+    image_url: str
+    metadata: dict
+
+
 class WebDiscovery:
     """Singleton service for web discovery (search + crawl).
 
@@ -68,6 +76,7 @@ class WebDiscovery:
             cls._instance = instance
         return cls._instance
 
+    @logfire.instrument("web_discovery.fetch_search_results")
     async def fetch_search_results(self, query: str, count: int = 5) -> list[SearchResult]:
         """Return raw Brave search results without crawling.
 
@@ -125,29 +134,20 @@ class WebDiscovery:
             # Update after any required wait to mark the time of this call
             self._last_brave_call_ts = monotonic()
 
-    @logfire.instrument("web_discovery.crawl")
-    async def crawl(
+    async def crawl_one(
         self,
-        urls: Iterable[str],
-        timeout: int = 30,
+        url: str,
         ignore_links: bool = True,
         ignore_images: bool = False,
         escape_html: bool = False,
         pruned: bool = True,
-    ) -> list[dict]:
-        """Crawl each URL and return extracted markdown + first image.
-
-        Args:
-            urls: List/iterable of URLs to crawl.
-            timeout: Per-request timeout (seconds). Not used directly.
-            ignore_links: Whether to ignore links.
-            ignore_images: Whether to ignore images.
-            escape_html: Whether to escape HTML.
-            pruned: Whether to prune the content.
-        Returns:
-            A list of dicts with shape: {"url", "content", "image_url"}
-        """
-        # Step 1: Create a pruning filter
+        deep: bool = False,
+        deep_crawl_strategy: DeepCrawlStrategy = BFSDeepCrawlStrategy(
+            max_depth=1, include_external=False, max_pages=100
+        ),
+        crawler: Optional[AsyncWebCrawler] = None,
+    ) -> list[CrawlResult]:
+        # Build pruning filter per call
         if pruned:
             logger.debug("Use pruning filter")
             prune_filter = PruningContentFilter(
@@ -172,83 +172,146 @@ class WebDiscovery:
             exclude_external_links=True,
             exclude_internal_links=True,
             exclude_social_media_links=True,
+            deep_crawl_strategy=deep_crawl_strategy if deep else None,
         )
 
-        def _is_probable_icon_or_logo(text_or_url: str) -> bool:
-            value = text_or_url.lower()
-            bad_tokens = [
-                "icon",
-                "favicon",
-                "apple-touch-icon",
-                "logo",
-                "sprite",
-                "brand",
-                "placeholder",
-                "avatar",
-                "badge",
-            ]
-            if any(token in value for token in bad_tokens):
-                return True
+        async def _run_with_crawler(
+            active_crawler: AsyncWebCrawler,
+        ) -> list[CrawlResult]:
+            async with self._semaphore:
+                crawl_result = await active_crawler.arun(
+                    url=url,
+                    config=config,
+                )
+                # Normalize to a list of underlying results when deep crawl
+                underlying_results = (
+                    crawl_result if isinstance(crawl_result, list) else [crawl_result]
+                )
 
-            bad_exts = [".svg", ".ico", ".gif"]
-            if any(value.endswith(ext) for ext in bad_exts):
-                return True
-
-            return False
-
-        def _extract_first_image_url(
-            markdown: str,
-            base_url: str,
-        ) -> Optional[str]:
-            # Pattern for Markdown images: ![alt](url)
-            pattern = r"!\[([^\]]*)\]\(([^)]+)\)"
-            for match in re.finditer(pattern, markdown):
-                alt_text = match.group(1).strip() if match.group(1) else ""
-                raw_url = match.group(2).strip()
-                if not raw_url or raw_url.startswith("data:"):
-                    continue
-                if _is_probable_icon_or_logo(alt_text):
-                    continue
-                if _is_probable_icon_or_logo(raw_url):
-                    continue
-                candidate = urljoin(base_url, raw_url)
-                if _is_probable_icon_or_logo(candidate):
-                    continue
-                return candidate
-            return None
-
-        async with AsyncWebCrawler() as crawler:
-
-            async def _crawl_one(url: str) -> dict:
-                async with self._semaphore:
-                    crawl_result = await crawler.arun(
-                        url=url,
-                        config=config,
-                    )
-                    content: Optional[str] = None
-                    image_url: Optional[str] = None
-                    if crawl_result.success:
-                        raw_markdown = str(crawl_result.markdown.raw_markdown)
-                        fit_markdown = str(crawl_result.markdown.fit_markdown)
+                normalized: list[CrawlResult] = []
+                for r in underlying_results:
+                    if getattr(r, "success", False):
+                        raw_markdown = str(r.markdown.raw_markdown)
+                        fit_markdown = str(r.markdown.fit_markdown)
                         content = (
                             fit_markdown
                             if len(fit_markdown.replace("\n", "").strip()) > 1
                             else raw_markdown
                         )
-                        image_url = _extract_first_image_url(content, url)
+                        metadata = getattr(r, "metadata", {}) or {}
+                        image_url = (
+                            metadata.get(
+                                "og:image",
+                                metadata.get("twitter:image", ""),
+                            )
+                            or ""
+                        )
+                        title = (
+                            metadata.get(
+                                "title",
+                                metadata.get(
+                                    "og:title",
+                                    metadata.get("twitter:title", ""),
+                                ),
+                            )
+                            or ""
+                        )
+                        description = (
+                            metadata.get(
+                                "description",
+                                metadata.get(
+                                    "og:description",
+                                    metadata.get("twitter:description", ""),
+                                ),
+                            )
+                            or ""
+                        )
+                        page_url = getattr(r, "url", url) or url
                         logfire.info(
                             "Crawl success",
-                            url=url,
+                            url=page_url,
+                            title=title,
+                            description=description,
                             image_url=image_url,
                             content=content,
                             fit_markdown=fit_markdown,
                             raw_markdown=raw_markdown,
                         )
                     else:
-                        logfire.info("Crawl failed", url=url)
-                return {"url": url, "content": content, "image_url": image_url}
+                        page_url = getattr(r, "url", url) or url
+                        title = ""
+                        description = ""
+                        content = ""
+                        image_url = ""
+                        logfire.info("Crawl failed", url=page_url)
 
-            return await asyncio.gather(*[_crawl_one(u) for u in urls])
+                    normalized.append(
+                        CrawlResult(
+                            url=page_url,
+                            title=title,
+                            description=description,
+                            content=content,
+                            image_url=image_url,
+                            metadata=metadata,
+                        )
+                    )
+
+            return normalized
+
+        if crawler is None:
+            async with AsyncWebCrawler() as own_crawler:
+                return await _run_with_crawler(own_crawler)
+        return await _run_with_crawler(crawler)
+
+    @logfire.instrument("web_discovery.crawl")
+    async def crawl(
+        self,
+        urls: Iterable[str],
+        ignore_links: bool = True,
+        ignore_images: bool = False,
+        escape_html: bool = False,
+        pruned: bool = True,
+        deep: bool = False,
+        deep_crawl_strategy: DeepCrawlStrategy = BFSDeepCrawlStrategy(
+            max_depth=1, include_external=False, max_pages=100
+        ),
+    ) -> list[CrawlResult]:
+        """Crawl a list of URLs and extract markdown and a preview image.
+
+        Applies the same configuration to all URLs. Internally delegates
+        each URL to ``crawl_one`` and reuses a single crawler for efficiency.
+
+        Args:
+            urls: Iterable of absolute URLs to crawl.
+            ignore_links: Whether to omit links in generated markdown.
+            ignore_images: Whether to omit images in generated markdown.
+            escape_html: Whether to escape HTML in generated markdown.
+            pruned: Whether to enable the pruning content filter.
+            deep: Whether to enable deep crawling (follow in-site links).
+            deep_crawl_strategy: Strategy to use when deep crawling.
+
+        Returns:
+            List of dicts (one per URL) with keys: 'url', 'title',
+            'description', 'content', and 'image_url'.
+        """
+        async with AsyncWebCrawler() as crawler:
+            tasks = [
+                self.crawl_one(
+                    url=u,
+                    ignore_links=ignore_links,
+                    ignore_images=ignore_images,
+                    escape_html=escape_html,
+                    pruned=pruned,
+                    deep=deep,
+                    deep_crawl_strategy=deep_crawl_strategy,
+                    crawler=crawler,
+                )
+                for u in urls
+            ]
+            per_url_lists = await asyncio.gather(*tasks)
+            # Flatten list[list[CrawlResult]] -> list[CrawlResult]
+            flattened: list[CrawlResult] = [item for sublist in per_url_lists for item in sublist]
+            return flattened
 
     @logfire.instrument("web_discovery.discover")
     async def discover(
