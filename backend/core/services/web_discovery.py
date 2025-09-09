@@ -47,6 +47,7 @@ class CrawlResult(TypedDict):
     content: str
     image_url: str
     metadata: dict
+    category: Optional[str]
 
 
 class WebDiscovery:

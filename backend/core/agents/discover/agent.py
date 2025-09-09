@@ -116,6 +116,7 @@ async def _select_for_source(
     # Map back to crawled results using indices, override title with AI title
     selected: list[CrawlResult] = []
     seen_indices: set[int] = set()
+    cfg_category = (source_cfg.get("category") or "").strip()
     for sel in selection.selected_articles:
         if sel.index in seen_indices:
             continue
@@ -129,6 +130,8 @@ async def _select_for_source(
         except Exception:
             meta = {"_raw_metadata": str(meta)}
         meta["source_config_url"] = source_cfg.get("url", "")
+        if cfg_category:
+            original["category"] = cfg_category
         original["metadata"] = meta
         selected.append(original)  # type: ignore[arg-type]
         seen_indices.add(sel.index)

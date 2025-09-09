@@ -80,6 +80,7 @@ class Settings(BaseSettings):
             "patterns": [
                 r"^https?://(?:www\.)?kenh14\.vn/.+?-\d{17,18}\.chn$",
             ],
+            "category": "Giải trí",
             "target_prompt": "Prioritize Genz-focused, viral content from Kenh14.vn, zeroing in on celebrity-centric news (Sao Việt, K-pop, Cbiz), showbiz scandals, and 'nóng trên mạng' trends. Select posts with high engagement potential, strong visuals, and a fast-paced, youth-oriented tone. Include fashion/beauty/lifestyle stories only if they feature major influencers or are globally trending. Strictly filter out hard news, politics, and serious social commentary unless directly tied to a major celebrity controversy.",
         },
         {
@@ -89,6 +90,7 @@ class Settings(BaseSettings):
             "patterns": [
                 ".html",
             ],
+            "category": "Thời sự",
             "target_prompt": "Curate top-impact, breaking news from VnExpress focusing on Current Affairs (Thời sự), World (Thế giới), Business (Kinh doanh), and Law (Pháp luật). Prioritize articles with significant national or international implications, major policy changes, or market-moving business developments. Exclude soft news, local-only stories, sports, and entertainment unless of major national importance.",
         },
         {
@@ -98,6 +100,7 @@ class Settings(BaseSettings):
             "patterns": [
                 r"^https?://(?:www\.)?cafef\.vn/.+?-\d{17,18}\.chn$",
             ],
+            "category": "Chứng khoán",
             "target_prompt": "Select investment-critical articles from CafeF's stock market section. Focus on market analysis, macroeconomic trends affecting stocks, corporate earnings reports, M&A activities, and official announcements from listed companies. Prioritize deep analysis over simple price updates. Exclude general business news not directly tied to stock market performance.",
         },
         {
@@ -107,6 +110,7 @@ class Settings(BaseSettings):
             "patterns": [
                 r"^https?://(?:www\.)?genk\.vn/.+?-\d{17,18}\.chn$",
             ],
+            "category": "AI & Công nghệ",
             "target_prompt": "From Genk's AI section, curate articles on significant AI advancements, new model releases, in-depth reviews of AI products/tools, and expert analysis of AI trends. Prioritize technical depth and practical application insights. Exclude brief news updates, rumors, and non-AI-related tech news.",
         },
     ]
