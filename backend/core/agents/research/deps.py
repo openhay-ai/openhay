@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Optional
 
 
@@ -44,7 +44,8 @@ class ResearchDeps:
     plan_id: Optional[str] = None
     plan: Optional[str] = None
     current_datetime: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S %Z")
+        # Use local timezone and a human-readable format
+        default_factory=lambda: (datetime.now().astimezone().strftime("%B %d, %Y at %I:%M %p %Z"))
     )
 
     def as_json(self) -> dict:

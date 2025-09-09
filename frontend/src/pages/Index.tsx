@@ -16,9 +16,11 @@ import nature from "@/assets/thumb-nature.jpg";
 import { cn } from "@/lib/utils";
 
 import { getFeaturedUrl } from "@/lib/api";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { authFetch } from "@/lib/auth";
+import { ExternalLink } from "lucide-react";
 
-type FeaturedItem = { title: string; img?: string; url?: string };
+type FeaturedItem = { title: string; img?: string; url?: string; category?: string | null };
 const fallbackFeatured: FeaturedItem[] = [
   { title: "Tàu Trung Quốc tự đâm vào nhau", img: city },
   { title: "Tổng Bí thư Tô Lâm thăm Hàn Quốc", img: laptop },
@@ -26,7 +28,7 @@ const fallbackFeatured: FeaturedItem[] = [
   { title: "Rừng Amazon đang bị cháy", img: nature },
 ];
 
-const chips = [
+const defaultChips = [
   "Vượt đèn vàng có bị phạt không",
   "Thử nhanh hơn tốc độ ánh sáng là gì",
   "Cách mạng là gì",
@@ -38,6 +40,9 @@ const chips = [
 
 const Index = () => {
   const [featured, setFeatured] = useState<FeaturedItem[]>(fallbackFeatured);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [activeCat, setActiveCat] = useState<string>("");
+  const [chips, setChips] = useState<string[]>(defaultChips);
   const filled: FeaturedItem[] = useMemo(() => {
     if (featured.length === 0) return [];
     if (featured.length >= 3) return featured;
@@ -56,14 +61,24 @@ const Index = () => {
         const res = await authFetch(getFeaturedUrl());
         if (!res.ok) throw new Error("Failed to fetch featured");
         const data = await res.json();
-        const items: { title: string; url?: string; image_url?: string }[] = data.items || [];
+        const items: { title: string; url?: string; image_url?: string; category?: string | null }[] = data.items || [];
+        const serverCats: string[] = data.categories || [];
+        const serverKeywords: { keyword: string; count: number }[] = data.keywords || [];
         if (items.length > 0) {
-          const mapped = items.map((i) => ({ title: i.title, url: i.url, img: i.image_url }));
+          const mapped = items.map((i) => ({ title: i.title, url: i.url, img: i.image_url, category: i.category ?? null }));
           setFeatured(mapped);
+        }
+        setCategories(serverCats);
+        setActiveCat(serverCats[0] ?? "");
+        if (serverKeywords.length > 0) {
+          setChips(serverKeywords.map((k) => k.keyword));
+        } else {
+          setChips(defaultChips);
         }
       } catch (e) {
         // ignore and keep fallback
         setFeatured(fallbackFeatured);
+        setChips(defaultChips);
       }
     };
     run();
@@ -71,9 +86,10 @@ const Index = () => {
 
   const handleSubmit = (value: string, files?: File[]) => {
     const currentType = searchParams.get("type") ?? undefined;
+    const query = `Tin tức mới nhất về ${value}`;
     const params = new URLSearchParams();
     if (currentType) params.set("type", currentType);
-    params.set("q", value);
+    params.set("q", query);
     const to = { pathname: "/", search: `?${params.toString()}` } as const;
     const state = files && files.length > 0 ? { files } : undefined;
     navigate(to, { state });
@@ -95,14 +111,29 @@ const Index = () => {
               </p>
 
               <div className="w-full">
+                {categories.length > 0 && (
+                    <div className="mb-6">
+                      <Tabs value={activeCat} onValueChange={setActiveCat}>
+                        <TabsList className="flex flex-wrap gap-1">
+                          <TabsTrigger value="">Tất cả</TabsTrigger>
+                          {categories.map((c) => (
+                            <TabsTrigger key={c} value={c}>
+                              {c}
+                            </TabsTrigger>
+                          ))}
+                        </TabsList>
+                        <TabsContent value={activeCat} />
+                      </Tabs>
+                    </div>
+                  )}
                 <Carousel opts={{ align: "start", slidesToScroll: 1 }} className="mb-10">
                   <CarouselContent>
-                    {filled.map((f) => (
+                    {(activeCat ? filled.filter((f) => f.category === activeCat) : filled).map((f) => (
                       <CarouselItem key={f.title} className="basis-full md:basis-1/3">
                         <article
                           onClick={() => handleSubmit(`Tin tức về ${f.title}`)}
                           className={cn(
-                            "flex items-center rounded-lg border overflow-hidden bg-card hover:shadow-md transition-shadow cursor-pointer"
+                            "relative group flex items-center rounded-lg border overflow-hidden bg-card hover:shadow-md transition-shadow cursor-pointer"
                           )}
                         >
                           <img
@@ -114,6 +145,21 @@ const Index = () => {
                             loading="lazy"
                           />
                           <div className="px-3 py-2 text-sm">{f.title}</div>
+                          {f.url ? (
+                            <Button
+                              size="icon"
+                              variant="secondary"
+                              className="absolute top-1 right-1 rounded-full h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(f.url as string, "_blank", "noopener,noreferrer");
+                              }}
+                              aria-label="Mở liên kết nguồn"
+                              title={f.url}
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                          ) : null}
                         </article>
                       </CarouselItem>
                     ))}
@@ -122,10 +168,11 @@ const Index = () => {
                   <CarouselNext />
                 </Carousel>
 
+
                 {/* Dot pagination removed */}
 
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-                  <span>🌎 Khám phá thêm:</span>
+                  <span>🌟 Từ khóa của ngày</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {chips.map((c) => (

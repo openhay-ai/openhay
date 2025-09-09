@@ -1,5 +1,13 @@
 import asyncio
+import json
 
+import logfire
+from backend.core.agents.research.citation import (
+    CitationItem,
+    CitationResult,
+    citation_agent,
+    extract_urls_from_text,
+)
 from backend.core.agents.research.deps import ResearchDeps
 from backend.core.agents.research.prompts import (
     lead_agent_system_prompt,
@@ -9,6 +17,13 @@ from backend.core.services.llm_invoker import llm_invoker
 from backend.core.services.web_discovery import WebDiscovery
 from backend.settings import settings
 from pydantic_ai import Agent, RunContext
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+)
 from pydantic_ai.toolsets import FunctionToolset
 
 
@@ -61,7 +76,7 @@ async def web_fetch(urls: list[str], timeout: int = 30) -> list[dict]:
         - Use for high-quality sources identified through web_search
     """
     svc = WebDiscovery()
-    crawled = await svc.crawl(urls=urls, timeout=timeout, pruned=False)
+    crawled = await svc.crawl(urls=urls, timeout=timeout, pruned=False, ignore_images=True)
     return crawled
 
 
@@ -159,3 +174,121 @@ async def lead_research_agent_instructions(
     return lead_agent_system_prompt.format(
         current_datetime=ctx.deps.current_datetime,
     )
+
+
+@logfire.instrument("run_citation_phase")
+async def run_citation_phase(
+    report: str,
+    history_text: str,
+    current_citations: list[CitationItem] | None = None,
+) -> CitationResult:
+    """Run the citation agent to insert inline numeric markers.
+
+    Args:
+        report: The final synthesized report from the lead agent.
+        history_text: Concatenated prior messages to mine allowed URLs from.
+
+    Returns:
+        CitationResult containing the annotated report and bibliography.
+    """
+    allowed_urls = extract_urls_from_text(history_text)
+    # Provide a compact instruction payload combining the report and URLs.
+    existing = current_citations or []
+    existing_json = json.dumps([c.model_dump() for c in existing], ensure_ascii=False)
+    prompt = (
+        "You will be given a report and a list of allowed URLs.\n"
+        "Insert numeric citations [n] into the report, "
+        "mapping to these URLs.\n"
+        "You are also given an existing citation list (JSON). Reuse numbers for\n"
+        "any URL already present; only append new entries and continue numbering.\n"
+        f"Allowed URLs (first-use order):\n"
+        f"{chr(10).join(allowed_urls)}\n\n"
+        f"Existing citations JSON:\n{existing_json}\n\n"
+        f"Report:\n{report}"
+    )
+    result = await citation_agent.run(prompt)
+    output: CitationResult = result.output
+    return output
+
+
+def messages_to_text(messages: list[ModelMessage], include_tools: bool = False) -> str:
+    """Render a simple text view of messages for citation harvesting.
+
+    When include_tools=True, also serialize tool calls and tool results so
+    URLs inside tool payloads are available to the citation agent.
+    """
+    lines: list[str] = []
+    for msg in messages:
+        if not hasattr(msg, "parts"):
+            continue
+        for part in msg.parts:  # type: ignore[attr-defined]
+            try:
+                if isinstance(part, TextPart):
+                    content = getattr(part, "content", None)
+                    if isinstance(content, str):
+                        lines.append(content)
+                elif include_tools and isinstance(part, ToolCallPart):
+                    tn = getattr(part, "tool_name", "")
+                    args = getattr(part, "args", None)
+                    try:
+                        args_txt = (
+                            json.dumps(args, ensure_ascii=False) if args is not None else "{}"
+                        )
+                    except Exception:
+                        args_txt = str(args)
+                    lines.append(f"[tool_call:{tn}] args={args_txt}")
+                elif include_tools and isinstance(part, ToolReturnPart):
+                    tn = getattr(part, "tool_name", "")
+                    content = getattr(part, "content", None)
+                    try:
+                        if isinstance(content, (dict, list)):
+                            c_txt = json.dumps(content, ensure_ascii=False)
+                        else:
+                            c_txt = str(content)
+                    except Exception:
+                        c_txt = str(content)
+                    lines.append(f"[tool_result:{tn}] {c_txt}")
+            except Exception:
+                # Best-effort extraction; skip problematic parts
+                continue
+    return "\n".join(lines)
+
+
+def filter_messages_for_citation(
+    messages: list[ModelMessage],
+) -> list[ModelMessage]:
+    """Return a minimal message list containing only web_fetch tool results.
+
+    Extracts each fetched page's URL and content, discarding all other tool
+    calls/results and assistant/user text. The resulting list contains a single
+    ModelRequest with a ToolReturnPart named "web_fetch" whose content is a
+    list of {"url", "content"} items.
+    """
+    fetch_items: list[dict] = []
+    for msg in messages:
+        parts = getattr(msg, "parts", [])
+        for part in parts:
+            try:
+                if (
+                    isinstance(part, ToolReturnPart)
+                    and getattr(part, "tool_name", "") == "web_fetch"
+                ):
+                    content = getattr(part, "content", None)
+                    if isinstance(content, list):
+                        for it in content:
+                            if not isinstance(it, dict):
+                                continue
+                            url = it.get("url")
+                            body = it.get("content")
+                            if isinstance(url, str) and isinstance(body, str):
+                                fetch_items.append({"url": url, "content": body})
+            except Exception:
+                continue
+    if not fetch_items:
+        return []
+    trp = ToolReturnPart(
+        tool_name="web_fetch",
+        content=fetch_items,
+        tool_call_id="citation_web_fetch",
+    )
+    return [ModelRequest(parts=[trp])]

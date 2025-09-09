@@ -68,6 +68,53 @@ class Settings(BaseSettings):
     # Environment
     env: Literal["prod", "dev"] = "prod"
 
+    # Discover sources config
+    discover_sources_config: list[dict] = [
+        {
+            "url": "https://kenh14.vn",
+            # These will be used for crawl4ai deep crawling.
+            # Adding more sites if needed.
+            # More info: https://docs.crawl4ai.com/core/deep-crawling/#41-basic-url-pattern-filter
+            "max_depth": 1,
+            "max_pages": 50,
+            "patterns": [
+                r"^https?://(?:www\.)?kenh14\.vn/.+?-\d{17,18}\.chn$",
+            ],
+            "category": "Giải trí",
+            "target_prompt": "Prioritize Genz-focused, viral content from Kenh14.vn, zeroing in on celebrity-centric news (Sao Việt, K-pop, Cbiz), showbiz scandals, and 'nóng trên mạng' trends. Select posts with high engagement potential, strong visuals, and a fast-paced, youth-oriented tone. Include fashion/beauty/lifestyle stories only if they feature major influencers or are globally trending. Strictly filter out hard news, politics, and serious social commentary unless directly tied to a major celebrity controversy.",
+        },
+        {
+            "url": "https://vnexpress.net",
+            "max_depth": 1,
+            "max_pages": 50,
+            "patterns": [
+                ".html",
+            ],
+            "category": "Thời sự",
+            "target_prompt": "Curate top-impact, breaking news from VnExpress focusing on Current Affairs (Thời sự), World (Thế giới), Business (Kinh doanh), and Law (Pháp luật). Prioritize articles with significant national or international implications, major policy changes, or market-moving business developments. Exclude soft news, local-only stories, sports, and entertainment unless of major national importance.",
+        },
+        {
+            "url": "https://cafef.vn/thi-truong-chung-khoan.chn",
+            "max_depth": 1,
+            "max_pages": 50,
+            "patterns": [
+                r"^https?://(?:www\.)?cafef\.vn/.+?-\d{17,18}\.chn$",
+            ],
+            "category": "Chứng khoán",
+            "target_prompt": "Select investment-critical articles from CafeF's stock market section. Focus on market analysis, macroeconomic trends affecting stocks, corporate earnings reports, M&A activities, and official announcements from listed companies. Prioritize deep analysis over simple price updates. Exclude general business news not directly tied to stock market performance.",
+        },
+        {
+            "url": "https://genk.vn/ai.chn",
+            "max_depth": 1,
+            "max_pages": 50,
+            "patterns": [
+                r"^https?://(?:www\.)?genk\.vn/.+?-\d{17,18}\.chn$",
+            ],
+            "category": "AI & Công nghệ",
+            "target_prompt": "From Genk's AI section, curate articles on significant AI advancements, new model releases, in-depth reviews of AI products/tools, and expert analysis of AI trends. Prioritize technical depth and practical application insights. Exclude brief news updates, rumors, and non-AI-related tech news.",
+        },
+    ]
+
     # RPM
     gemini_flash_rpm: int = 5
     gemini_pro_rpm: int = 3
@@ -114,6 +161,19 @@ class Settings(BaseSettings):
         )
         return GoogleModel(
             model_name=self.subagent_research_llm_model,
+            settings=google_settings,
+        )
+
+    @property
+    def discover_model(self) -> Model:
+        google_settings = GoogleModelSettings(
+            google_thinking_config={
+                "thinking_budget": 4096,
+                "include_thoughts": True,
+            }
+        )
+        return GoogleModel(
+            model_name=self.llm_model,
             settings=google_settings,
         )
 
