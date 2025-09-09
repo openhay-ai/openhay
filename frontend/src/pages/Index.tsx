@@ -86,10 +86,9 @@ const Index = () => {
 
   const handleSubmit = (value: string, files?: File[]) => {
     const currentType = searchParams.get("type") ?? undefined;
-    const query = `Tin tức mới nhất về ${value}`;
     const params = new URLSearchParams();
     if (currentType) params.set("type", currentType);
-    params.set("q", query);
+    params.set("q", value);
     const to = { pathname: "/", search: `?${params.toString()}` } as const;
     const state = files && files.length > 0 ? { files } : undefined;
     navigate(to, { state });
@@ -131,7 +130,7 @@ const Index = () => {
                     {(activeCat ? filled.filter((f) => f.category === activeCat) : filled).map((f) => (
                       <CarouselItem key={f.title} className="basis-full md:basis-1/3">
                         <article
-                          onClick={() => handleSubmit(`Tin tức về ${f.title}`)}
+                          onClick={() => handleSubmit(`Tin tức mới nhất về ${f.title}`)}
                           className={cn(
                             "relative group flex items-center rounded-lg border overflow-hidden bg-card hover:shadow-md transition-shadow cursor-pointer"
                           )}
@@ -176,7 +175,7 @@ const Index = () => {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {chips.map((c) => (
-                    <Button key={c} variant="chip" size="sm" onClick={() => handleSubmit(c)}>
+                    <Button key={c} variant="chip" size="sm" onClick={() => handleSubmit(`Tin tức mới nhất về ${c}`)}>
                       {c}
                     </Button>
                   ))}
