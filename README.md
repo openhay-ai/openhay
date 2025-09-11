@@ -1,15 +1,15 @@
 # OpenHay
 
 <p align="center">
-  <img src="./assets/logo-openhay.png" alt="OpenHay Logo" width="100"/>
+  <a href="https://github.com/openhay-ai/openhay"><img src="./assets/logo-openhay.png" alt="OpenHay Logo" width="100"/></a>
+</p>
+<h1 align="center">OpenHay</h1>
+<p align="center">
+  <strong>OpenHay: An open-source platform to freely explore the world's knowledge, for Vietnamese.</strong>
 </p>
 
 <p align="center">
-  <strong>An Vietnamese open-source, self-hostable implementation of a AI search and research platform.</strong>
-</p>
-
-<p align="center">
-    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT">
+    <a href="https://github.com/openhay-ai/openhay/blob/main/LICENSE"><img src="https://img.shields.io/github/license/openhay-ai/openhay" alt="License"/></a>
     <img src="https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit" alt="pre-commit">
     <img src="https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg" alt="Conventional Commits">
 </p>
@@ -20,7 +20,7 @@
 
 Check out the live deployed version of OpenHay at https://www.openhay.vn
 
-Note that usage is limited and system may raise overload error.
+*Note that usage is limited and system may raise overload error.*
 
 ---
 
@@ -68,7 +68,7 @@ All contributors are expected to adhere to our [Code of Conduct](./CODE_OF_CONDU
 ### Support
 
 For questions or issues, please contact:
--   **Primary Contact**: Quang Pham via [quangphamm1902@gmail.com](mailto:quangphamm1902@gmail.com).
+-   **Primary Contact**: Quang Pham via [quangphamm1902@gmail.com](mailto:quangphamm1902@gmail.com) or Nhat Quy via [quymyhungill@gmail.com](mailto:quymyhungill@gmail.com)
 -   **Issues**: Use the [GitHub Issues tracker](https://github.com/your-repo/openhay/issues) for bugs and feature requests.
 
 ## License
