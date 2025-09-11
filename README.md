@@ -1,7 +1,7 @@
 # OpenHay
 
 <p align="center">
-  <img src="https://www.openhay.vn/assets/logo-aihay-S8xqUw78.png" alt="OpenHay Logo" width="100"/>
+  <img src="./assets/logo-openhay.png" alt="OpenHay Logo" width="100"/>
 </p>
 
 <p align="center">
@@ -13,6 +13,14 @@
     <img src="https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit" alt="pre-commit">
     <img src="https://img.shields.io/badge/Conventional%20Commits-1.0.0-yellow.svg" alt="Conventional Commits">
 </p>
+
+---
+
+## Live Demo
+
+Check out the live deployed version of OpenHay at https://www.openhay.vn
+
+Note that usage is limited and system may raise overload error.
 
 ---
 
