@@ -1,0 +1,26 @@
+[project]
+name = "open-hay"
+version = "0.1.0"
+description = "Open Hay - Thật sự hay cho học sinh"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "sqlmodel>=0.0.21",
+    "SQLAlchemy>=2.0.30",
+    "psycopg[binary]>=3.2",
+    "pydantic[email]>=2.7",
+    "crawl4ai>=0.7.3",
+    "pydantic-ai[logfire]>=0.7.5",
+    "fastapi>=0.116.1",
+    "aiohttp>=3.12.15",
+    "pre-commit>=4.3.0",
+    "loguru>=0.7.3",
+    "logfire[fastapi]>=4.3.1",
+    "PyJWT>=2.8.0",
+    "slowapi>=0.1.9",
+    "resend>=2.13.1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
