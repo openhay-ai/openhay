@@ -1346,7 +1346,7 @@ wheels = [
 ]
 
 [[package]]
-name = "open-ai-hay"
+name = "open-hay"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

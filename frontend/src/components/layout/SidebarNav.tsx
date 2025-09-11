@@ -1,6 +1,6 @@
 import { Languages, History, CircleHelp, Search, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import logo from "@/assets/logo-aihay.png";
+import logo from "@/assets/logo-openhay.png";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import SupportModal from "@/components/SupportModal";
