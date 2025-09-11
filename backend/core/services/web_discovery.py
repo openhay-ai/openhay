@@ -244,6 +244,7 @@ class WebDiscovery:
                         description = ""
                         content = ""
                         image_url = ""
+                        metadata = {}
                         logfire.info("Crawl failed", url=page_url)
 
                     normalized.append(
