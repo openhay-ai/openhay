@@ -78,7 +78,9 @@ class WebDiscovery:
         return cls._instance
 
     @logfire.instrument("web_discovery.fetch_search_results")
-    async def fetch_search_results(self, query: str, count: int = 5) -> list[SearchResult]:
+    async def fetch_search_results(
+        self, query: str, count: int = 5
+    ) -> list[SearchResult]:
         """Return raw Brave search results without crawling.
 
         Args:
@@ -244,6 +246,7 @@ class WebDiscovery:
                         description = ""
                         content = ""
                         image_url = ""
+                        metadata = {}
                         logfire.info("Crawl failed", url=page_url)
 
                     normalized.append(
@@ -311,7 +314,9 @@ class WebDiscovery:
             ]
             per_url_lists = await asyncio.gather(*tasks)
             # Flatten list[list[CrawlResult]] -> list[CrawlResult]
-            flattened: list[CrawlResult] = [item for sublist in per_url_lists for item in sublist]
+            flattened: list[CrawlResult] = [
+                item for sublist in per_url_lists for item in sublist
+            ]
             return flattened
 
     @logfire.instrument("web_discovery.discover")
