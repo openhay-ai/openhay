@@ -11,7 +11,6 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import city from "@/assets/thumb-city.jpg";
-import laptop from "@/assets/thumb-laptop.jpg";
 import nature from "@/assets/thumb-nature.jpg";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +22,7 @@ import { ExternalLink } from "lucide-react";
 type FeaturedItem = { title: string; img?: string; url?: string; category?: string | null };
 const fallbackFeatured: FeaturedItem[] = [
   { title: "Tàu Trung Quốc tự đâm vào nhau", img: city },
-  { title: "Tổng Bí thư Tô Lâm thăm Hàn Quốc", img: laptop },
+  { title: "Tổng Bí thư Tô Lâm thăm Hàn Quốc", img: city },
   { title: "Tài khoản giao thông là gì", img: nature },
   { title: "Rừng Amazon đang bị cháy", img: nature },
 ];
