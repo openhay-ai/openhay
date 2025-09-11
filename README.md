@@ -68,7 +68,7 @@ All contributors are expected to adhere to our [Code of Conduct](./CODE_OF_CONDU
 ### Support
 
 For questions or issues, please contact:
--   **Primary Contact**: Quang Pham via [quangphamm1902@gmail.com](mailto:quangphamm1902@gmail.com) or Nhat Quy via [quymyhungill@gmail.com](mailto:quymyhungill@gmail.com)
+-   **Primary Contact**: Quang Pham via [quangphamm1902@gmail.com](mailto:quangphamm1902@gmail.com) or Quy Tran via [quymyhungill@gmail.com](mailto:quymyhungill@gmail.com)
 -   **Issues**: Use the [GitHub Issues tracker](https://github.com/your-repo/openhay/issues) for bugs and feature requests.
 
 ## License
