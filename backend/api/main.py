@@ -3,6 +3,11 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 import logfire
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from loguru import logger
+from sqlalchemy import text
+
 from backend.api.routers.auth import router as auth_router
 from backend.api.routers.chat import router as chat_router
 from backend.api.routers.contact import router as contact_router
@@ -17,10 +22,6 @@ from backend.core.middleware import (
 )
 from backend.db import async_engine, create_all, seed_feature_presets
 from backend.settings import settings
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from loguru import logger
-from sqlalchemy import text
 
 
 def _get_cors_origins() -> list[str]:
@@ -80,8 +81,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Open AI Hay API", lifespan=lifespan)
 
-logfire.configure(token=settings.logfire_token, scrubbing=False, environment=settings.env)
+logfire.configure(
+    token=settings.logfire_token,
+    scrubbing=False,
+    environment=settings.env,
+    send_to_logfire="if-token-present",
+)
 logfire.instrument_fastapi(app)
+logfire.instrument_pydantic_ai()
 
 # Security and rate limiting middleware
 app.add_middleware(SecurityHeadersMiddleware)

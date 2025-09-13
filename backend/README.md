@@ -4,7 +4,7 @@ This is the backend for Open AI Hay, a FastAPI application that provides AI-powe
 
 ## Local Development Setup
 
-Follow these steps to get the backend running on your local machine.
+Follow these steps to get the backend running directly on your local machine without Docker.
 
 ### Prerequisites
 
@@ -34,7 +34,21 @@ source .venv/bin/activate
 uv sync --locked
 ```
 
-### 3. Configure Environment Variables
+### 3. Crawl4AI Setup (one-time)
+
+Run the setup command once:
+
+```bash
+uv run crawl4ai-setup
+```
+
+If you later see Playwright/browser errors, install Chromium:
+
+```bash
+uv run playwright install --with-deps chromium
+```
+
+### 4. Configure Environment Variables
 
 Create a `.env` file by copying the example file:
 
@@ -50,11 +64,36 @@ Now, open the `.env` file and fill in the required values. At a minimum, you mus
 
 See the comments in the `.env.example` file for more details on each variable.
 
-### 4. Database Setup
+### 5. Database Setup
 
-Ensure your PostgreSQL server is running and a database (e.g., `aihay`) has been created. The application will automatically create the necessary tables and seed initial data on startup.
+Ensure PostgreSQL is running and a database (e.g., `openhay`) exists. The app will create tables, extensions, and seed presets on first start.
 
-### 5. Run the Application
+For macOS with Homebrew:
+
+```bash
+# Install and start PostgreSQL
+brew install postgresql@16
+brew services start postgresql@16
+
+# Create a default user and the database
+createuser -s postgres || true
+psql -U postgres -h 127.0.0.1 -p 5432 -c "ALTER USER postgres WITH PASSWORD 'postgres';"
+createdb -U postgres -h 127.0.0.1 -p 5432 openhay
+```
+
+Set your database URL in `.env`:
+
+```env
+DATABASE_URL="postgresql+psycopg://postgres:postgres@localhost:5432/openhay"
+```
+
+Optional: verify connectivity
+
+```bash
+psql "postgresql://postgres:postgres@localhost:5432/openhay" -c "SELECT 1;"
+```
+
+### 6. Run the Application
 
 ```bash
 uv run uvicorn backend.api.main:app --reload --port 8000
@@ -98,8 +137,8 @@ graph TD
 
 The application leverages a few key libraries to handle complex tasks:
 
--   **LLM Orchestration**: [pydantic-ai](https://github.com/pydantic/pydantic-ai) is used within the Agent Layer to orchestrate interactions with LLM providers, manage agentic workflows, and handle structured data parsing.
--   **Observability**: [logfire](https://github.com/pydantic/logfire) is integrated for comprehensive logging and tracing, offering deep insights into request lifecycles and the behavior of LLM chains.
+- **LLM Orchestration**: [pydantic-ai](https://github.com/pydantic/pydantic-ai) is used within the Agent Layer to orchestrate interactions with LLM providers, manage agentic workflows, and handle structured data parsing.
+- **Observability**: [logfire](https://github.com/pydantic/logfire) is integrated for comprehensive logging and tracing, offering deep insights into request lifecycles and the behavior of LLM chains.
 
 ## Deployment on Railway
 

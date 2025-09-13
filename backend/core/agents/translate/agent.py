@@ -1,14 +1,8 @@
-import logfire
-from backend.core.agents.translate.deps import TranslateDeps
-from backend.core.agents.translate.prompts import (
-    system_prompt as translate_system_prompt,
-)
-from backend.settings import settings
 from pydantic_ai import Agent, RunContext
 
-logfire.configure(token=settings.logfire_token, scrubbing=False, environment=settings.env)
-logfire.instrument_pydantic_ai()
-
+from backend.core.agents.translate.deps import TranslateDeps
+from backend.core.agents.translate.prompts import system_prompt as translate_system_prompt
+from backend.settings import settings
 
 translate_agent = Agent(
     settings.model,
