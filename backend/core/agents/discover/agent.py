@@ -11,9 +11,6 @@ from crawl4ai.deep_crawling.filters import FilterChain, URLPatternFilter
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-logfire.configure(token=settings.logfire_token, scrubbing=False, environment=settings.env)
-logfire.instrument_pydantic_ai()
-
 
 class SelectedArticle(BaseModel):
     index: int

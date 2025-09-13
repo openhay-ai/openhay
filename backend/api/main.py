@@ -80,8 +80,14 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Open AI Hay API", lifespan=lifespan)
 
-logfire.configure(token=settings.logfire_token, scrubbing=False, environment=settings.env)
+logfire.configure(
+    token=settings.logfire_token,
+    scrubbing=False,
+    environment=settings.env,
+    send_to_logfire="if-token-present",
+)
 logfire.instrument_fastapi(app)
+logfire.instrument_pydantic_ai()
 
 # Security and rate limiting middleware
 app.add_middleware(SecurityHeadersMiddleware)
