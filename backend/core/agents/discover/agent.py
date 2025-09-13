@@ -2,17 +2,15 @@ import json
 from typing import Optional
 
 import logfire
-from backend.core.agents.discover.prompts import discover_system_prompt
-from backend.core.services.llm_invoker import llm_invoker
-from backend.core.services.web_discovery import CrawlResult, WebDiscovery
-from backend.settings import settings
 from crawl4ai.deep_crawling import BFSDeepCrawlStrategy
 from crawl4ai.deep_crawling.filters import FilterChain, URLPatternFilter
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 
-logfire.configure(token=settings.logfire_token, scrubbing=False, environment=settings.env)
-logfire.instrument_pydantic_ai()
+from backend.core.agents.discover.prompts import discover_system_prompt
+from backend.core.services.llm_invoker import llm_invoker
+from backend.core.services.web_discovery import CrawlResult, WebDiscovery
+from backend.settings import settings
 
 
 class SelectedArticle(BaseModel):

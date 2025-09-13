@@ -1,13 +1,10 @@
-import logfire
+from loguru import logger
+from pydantic_ai import Agent, RunContext
+
 from backend.core.agents.chat.deps import ChatDeps
 from backend.core.agents.chat.prompts import system_prompt
 from backend.core.tools.search import fetch_url, search
 from backend.settings import settings
-from loguru import logger
-from pydantic_ai import Agent, RunContext
-
-logfire.configure(token=settings.logfire_token, scrubbing=False, environment=settings.env)
-logfire.instrument_pydantic_ai()
 
 # TODO: Improve the citation method to reduce the token usage.
 
@@ -65,16 +62,3 @@ async def fetch_url_content(urls: list[str]) -> list[dict]:
     logger.debug(f"Fetching content from {len(urls)} URLs: {urls}")
     results = await fetch_url(urls, pruned=False)
     return results
-
-
-if __name__ == "__main__":
-    import asyncio
-
-    response = asyncio.run(
-        chat_agent.run(
-            "Tường tận chi tiết về tiểu sử của đồng chí Tô Lâm",
-            deps=ChatDeps(),
-        )
-    )
-
-    print(response.all_messages())
