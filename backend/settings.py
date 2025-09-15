@@ -1,5 +1,6 @@
 from typing import Literal, Optional
-
+import os
+from pathlib import Path
 from dotenv import load_dotenv
 from pydantic_ai.models import Model
 from pydantic_ai.models.anthropic import AnthropicModel
@@ -7,7 +8,12 @@ from pydantic_ai.models.google import GoogleModel, GoogleModelSettings
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_settings import BaseSettings
 
-load_dotenv()
+# load_dotenv()
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load the .env file from the backend directory
+load_dotenv(os.path.join(BASE_DIR, 'backend/.env'))
 
 
 class Settings(BaseSettings):

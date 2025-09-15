@@ -34,6 +34,12 @@ source .venv/bin/activate
 uv sync --locked
 ```
 
+Updated
+cd D:/contributors/openhay
+source backend/.venv/Scripts/activate
+python -m uvicorn backend.api.main:app --reload --port 8000
+
+
 ### 3. Configure Environment Variables
 
 Create a `.env` file by copying the example file:
