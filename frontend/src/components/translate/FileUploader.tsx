@@ -144,7 +144,7 @@ const FileUploader = ({ accept, multiple = true, onChange }: FileUploaderProps) 
           </button>
           <span className="text-muted-foreground"> hoặc kéo thả</span>
         </div>
-        <div className="text-xs text-muted-foreground">PDF, DOC, XLS, TXT, MD, HTML, Hình ảnh</div>
+        <div className="text-xs text-muted-foreground">PDF, DOCX, XLS, TXT, MD, HTML</div>
         <input
           ref={inputRef}
           type="file"
