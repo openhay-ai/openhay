@@ -25,7 +25,6 @@ class TranslateService(BaseConversationService):
         """Return a conservative set of MIME types Gemini reliably supports as inline data.
 
         Notes:
-            - Images, audio, video use type prefixes and are matched separately.
             - PDF is supported as application/pdf.
             - Plain/markdown/text formats are supported.
         """
@@ -37,16 +36,8 @@ class TranslateService(BaseConversationService):
         }
 
     @staticmethod
-    def is_gemini_supported_media_type(media_type: str | None) -> bool:
-        if not media_type:
-            return False
+    def is_gemini_supported_media_type(media_type: str) -> bool:
         mt = media_type.lower()
-        if mt.startswith("image/"):
-            return True
-        if mt.startswith("audio/"):
-            return True
-        if mt.startswith("video/"):
-            return True
         if mt in TranslateService.gemini_supported_mime_types():
             return True
         return False

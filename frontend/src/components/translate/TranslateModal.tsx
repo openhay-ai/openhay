@@ -13,7 +13,6 @@ type Props = {
 };
 
 const ACCEPT = [
-  "image/*", // excluded by requirement, keep comment: audio/video skipped
   ".pdf",
   ".txt",
   ".csv",
