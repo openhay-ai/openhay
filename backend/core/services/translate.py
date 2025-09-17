@@ -97,7 +97,8 @@ class TranslateService(BaseConversationService):
                     result = mammoth.convert_to_html(f)
                     html = result.value or ""
                     # Normalize HTML to Markdown, preserving headings/lists as best as possible
-                    markdown = md(html, heading_style="ATX")
+                    # Strip images to keep only text content for translation
+                    markdown = md(html, heading_style="ATX", strip=["img", "picture", "figure"])
                     if markdown.strip():
                         return markdown
                     # Fallback to simple paragraph extraction if conversion produced nothing
