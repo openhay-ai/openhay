@@ -8,6 +8,7 @@ from backend.api.routers.chat import router as chat_router
 from backend.api.routers.contact import router as contact_router
 from backend.api.routers.featured import router as featured_router
 from backend.api.routers.health import router as health_router
+from backend.api.routers.metrics import router as metrics_router
 from backend.api.routers.research import router as research_router
 from backend.api.routers.translate import router as translate_router
 from backend.core.middleware import (
@@ -112,6 +113,7 @@ app.include_router(featured_router)
 app.include_router(research_router)
 app.include_router(translate_router)
 app.include_router(contact_router)
+app.include_router(metrics_router)
 
 
 # Convenience for `uvicorn backend.api.main:app --reload`
