@@ -9,6 +9,7 @@ import Research from "@/pages/Research";
 import Translate from "@/pages/Translate";
 import History from "@/pages/History";
 import NotFound from "@/pages/NotFound";
+import Dashboard from "@/pages/Dashboard";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/research" element={<Research />} />
           <Route path="/translate" element={<Translate />} />
           <Route path="/history" element={<History />} />
+          <Route path="/dashboard" element={<Dashboard />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

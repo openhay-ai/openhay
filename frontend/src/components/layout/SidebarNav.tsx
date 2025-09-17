@@ -34,7 +34,7 @@ export const SidebarNav = () => {
   ];
   return (
     <aside className="hidden md:flex fixed inset-y-0 left-0 w-64 flex-col border-r bg-sidebar text-sidebar-foreground z-10">
-      <div className="flex items-center gap-1 px-4 py-4 border-b">
+      <Link to="/" className="flex items-center gap-1 px-4 py-4 border-b">
         <img
           src={logo}
           alt="OpenHay Logo"
@@ -42,7 +42,7 @@ export const SidebarNav = () => {
           loading="lazy"
         />
         <span className="font-semibold">OpenHay</span>
-      </div>
+      </Link>
 
       <nav className="flex-1 overflow-auto p-2">
         <ul className="space-y-1">

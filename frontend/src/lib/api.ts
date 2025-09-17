@@ -40,3 +40,24 @@ export function getTranslateFileSseEndpoint(): string {
 export function getSupportEndpoint(): string {
   return `${getApiBaseUrl()}/api/contact/support`;
 }
+
+// Metrics endpoints
+export function getMetricsTotalMessages(startIso: string, endIso: string): string {
+  const p = new URLSearchParams({ start: startIso, end: endIso });
+  return `${getApiBaseUrl()}/api/metrics/total-messages?${p.toString()}`;
+}
+
+export function getMetricsMessagesByUser(startIso: string, endIso: string): string {
+  const p = new URLSearchParams({ start: startIso, end: endIso });
+  return `${getApiBaseUrl()}/api/metrics/messages-by-user?${p.toString()}`;
+}
+
+export function getMetricsMessagesByPreset(startIso: string, endIso: string): string {
+  const p = new URLSearchParams({ start: startIso, end: endIso });
+  return `${getApiBaseUrl()}/api/metrics/messages-by-preset?${p.toString()}`;
+}
+
+export function getMetricsTotalUsers(startIso: string, endIso: string): string {
+  const p = new URLSearchParams({ start: startIso, end: endIso });
+  return `${getApiBaseUrl()}/api/metrics/total-users?${p.toString()}`;
+}
