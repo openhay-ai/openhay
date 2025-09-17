@@ -175,13 +175,19 @@ async def translate_file(
 
                 message_history = await svc.load_message_history(conversation.id)
 
-                # Extract text from media (first item for MVP)
+                # Use extracted text for unsupported binary types (e.g., DOCX), otherwise include media
+                extracted_text = svc.extract_text_from_media(payload.media)
                 safe_media = svc.decode_media_items(payload.media)
 
-                user_prompt = [
-                    payload.message,
-                    *safe_media,
-                ]
+                # If any media type is not supported by Gemini, prefer extracted text only
+                use_text_only = False
+                if payload.media:
+                    first_media_type = (payload.media[0].media_type or "").lower()
+                    use_text_only = not svc.is_gemini_supported_media_type(first_media_type)
+
+                user_prompt = (
+                    payload.message if use_text_only else [payload.message, *safe_media]
+                )
 
                 async def on_complete(result) -> list[str]:
                     events: list[str] = []
@@ -197,18 +203,30 @@ async def translate_file(
                         logger.exception("Failed to persist translation message run")
                     return events
 
-                async for sse_message in stream_agent_text(
-                    translate_agent,
-                    user_prompt,
-                    deps=TranslateDeps(
-                        target_lang=payload.target_lang,
-                        source_lang=payload.source_lang,
-                        content_to_translate="",
-                    ),
-                    message_history=message_history,
-                    on_complete=on_complete,
-                ):
-                    yield sse_message
+                try:
+                    async for sse_message in stream_agent_text(
+                        translate_agent,
+                        user_prompt,
+                        deps=TranslateDeps(
+                            target_lang=payload.target_lang,
+                            source_lang=payload.source_lang,
+                            content_to_translate=extracted_text if use_text_only else "",
+                        ),
+                        message_history=message_history,
+                        on_complete=on_complete,
+                    ):
+                        yield sse_message
+                except Exception as model_exc:
+                    error_payload = {
+                        "error": "Model rejected attached file(s)",
+                        "details": str(model_exc),
+                        "hint": (
+                            "Gemini supports text/markdown/html/pdf and common images/audio/video inline. "
+                            "DOCX, PPTX, XLSX are not accepted inline; DOCX text is extracted automatically."
+                        ),
+                    }
+                    yield format_sse("error", error_payload)
+                    return
         except Exception as exc:
             error_response = {
                 "error": "Translate File execution error",

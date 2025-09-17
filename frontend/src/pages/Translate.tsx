@@ -8,13 +8,10 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 const ACCEPT = [
-  "image/*",
   ".pdf",
   ".txt",
   ".csv",
-  ".doc",
   ".docx",
-  ".xls",
   ".xlsx",
   ".html",
   ".md",
