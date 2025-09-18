@@ -51,8 +51,6 @@ export const PromptInput = ({
     ".pdf",
     ".txt",
     ".csv",
-    ".doc",
-    ".docx",
     ".xls",
     ".xlsx",
     ".html",
