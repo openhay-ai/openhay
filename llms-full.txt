@@ -1,0 +1,199 @@
+# Open AI Hay API — Extended LLM Context
+
+> FastAPI backend providing chat, research, and translation via pydantic-ai agents with SSE streaming, Brave web search + crawl4ai content extraction, and persistent conversation history with ownership checks.
+
+## Overview
+
+- Primary routes
+  - /api/chat (list, stream chat, history)
+  - /api/research (lead agent orchestrating parallel subagents; citations)
+  - /api/translate/url, /api/translate/file (streamed translation)
+  - /api/featured (daily curated items)
+  - /api/metrics/* (aggregations over conversation runs)
+  - /api/auth/* (token/guest/refresh/logout)
+  - /api/contact/* (support, waitlist)
+  - /healthz, /health, /health/detailed
+- Authentication
+  - Bearer JWT for: /api/chat, /api/research, /api/translate, /api/metrics/*
+  - Tokens
+    - POST /api/auth/token { identifier }
+    - POST /api/auth/token/guest
+    - POST /api/auth/refresh (refresh cookie rotates)
+  - Ownership: conversations scoped via feature_params.user_id; enforced before access
+- Rate limits (per IP)
+  - /api/chat: 20/min; /api/research: 10/min; /api/translate: 30/min; default: 50/min
+  - Provider RPM guard + provider-aware retries for LLM calls
+- Streaming (SSE)
+  - media_type: text/event-stream; charset=utf-8
+  - Common events: ai_message, conversation_created, error
+  - Chat extras: search_results, fetch_url_results
+  - Research extras: lead_thinking, lead_answer, web_search_query, web_search_results, subagent_completed, final_report
+- Agents and tools
+  - chat_agent tools: search_web(query,n), fetch_url_content(urls)
+  - research subagent tools: web_search(query,max_results), web_fetch(urls)
+  - research lead deferred tool: run_parallel_subagents(prompts)
+- Web discovery
+  - Search: Brave API (requires BRAVE_API_KEY), shared 1.1s throttle process-wide
+  - Crawl: crawl4ai markdown extraction (pruning filter; optional deep crawl)
+- Persistence
+  - ConversationMessageRun.messages stored as JSONB list of ModelMessage (bytes base64)
+  - Runs appended chronologically; used as message_history
+- Security & cache
+  - Security headers added globally
+  - /api/chat, /api/research, /api/translate responses: no-store, no-cache
+
+## Request Schemas (concise)
+
+- ChatRequest
+```json
+{
+  "message": "string",
+  "conversation_id": "UUID (optional)",
+  "media": [
+    { "data": "<base64>", "media_type": "image/png", "identifier": "optional" }
+  ]
+}
+```
+
+- ResearchRequest
+```json
+{
+  "query": "string",
+  "conversation_id": "UUID (optional)",
+  "media": [ { "data": "<base64>", "media_type": "text/markdown" } ]
+}
+```
+
+- TranslateURLRequest
+```json
+{
+  "url": "https://example.com",
+  "message": "Dịch sang tiếng Việt",
+  "target_lang": "vi",
+  "source_lang": "en (optional)",
+  "conversation_id": "UUID (optional)"
+}
+```
+
+- TranslateFileRequest
+```json
+{
+  "message": "Translate this file",
+  "target_lang": "vi",
+  "source_lang": "auto (optional)",
+  "media": [ { "data": "<base64>", "media_type": "application/pdf" } ],
+  "conversation_id": "UUID (optional)"
+}
+```
+
+- BinaryContentIn
+```json
+{ "data": "<base64>", "media_type": "string", "identifier": "string (optional)" }
+```
+
+## Streaming Event Examples (SSE)
+
+- ai_message
+```
+event: ai_message
+data: {"chunk": {"content": "Xin chào"}, "model": "google:gemini-2.5-flash"}
+```
+
+- conversation_created
+```
+event: conversation_created
+data: {"conversation_id": "2a2b0e5b-46f3-4e57-9f2c-0c4b0a0a7dcb"}
+```
+
+- error
+```
+event: error
+data: {"error": "Chat execution error", "error_type": "RuntimeError", "details": "..."}
+```
+
+- search_results
+```
+event: search_results
+data: {"results": [{"title": "...", "url": "https://...", "description": "...", "content": "...", "image_url": "..."}]}
+```
+
+- fetch_url_results
+```
+event: fetch_url_results
+data: {"results": [{"url": "https://...", "title": "...", "description": "...", "content": "# extracted markdown...", "image_url": "..."}]}
+```
+
+- lead_thinking
+```
+event: lead_thinking
+data: {"thinking": "...streamed internal reasoning..."}
+```
+
+- lead_answer
+```
+event: lead_answer
+data: {"answer": "...partial final output with resolved [domain](https://url) markers..."}
+```
+
+- web_search_query
+```
+event: web_search_query
+data: {"id": "tool_call_id", "index": 0, "query": "ai tin tức"}
+```
+
+- web_search_results
+```
+event: web_search_results
+data: {"id": "tool_call_id", "index": 0, "results": [{"title": "...", "url": "https://...", "description": "..."}]}
+```
+
+- subagent_completed
+```
+event: subagent_completed
+data: {}
+```
+
+- final_report
+```
+event: final_report
+data: {"report": "...report text with [reuters](https://reuters.com/...) style links..."}
+```
+
+## Usage Examples (curl)
+
+- Obtain token
+```bash
+curl -s -X POST https://<host>/api/auth/token \
+  -H 'Content-Type: application/json' \
+  -d '{"identifier":"user@example.com"}'
+```
+
+- Chat stream
+```bash
+curl -N -X POST https://<host>/api/chat \
+  -H 'Authorization: Bearer $TOKEN' -H 'Content-Type: application/json' \
+  -d '{"message":"Xin chào"}'
+```
+
+- Research stream
+```bash
+curl -N -X POST https://<host>/api/research \
+  -H 'Authorization: Bearer $TOKEN' -H 'Content-Type: application/json' \
+  -d '{"query":"Tóm tắt tình hình AI gần đây"}'
+```
+
+- Translate URL stream
+```bash
+curl -N -X POST https://<host>/api/translate/url \
+  -H 'Authorization: Bearer $TOKEN' -H 'Content-Type: application/json' \
+  -d '{"url":"https://example.com","message":"Dịch sang tiếng Việt","target_lang":"vi"}'
+```
+
+## Environment & Configuration
+
+- Required: DATABASE_URL
+- Important: JWT_SECRET_KEY (prod), BRAVE_API_KEY (web search), LOGFIRE_TOKEN (telemetry)
+- LLM keys: GOOGLE_API_KEY / OPENAI_API_KEY / ANTHROPIC_API_KEY
+- CORS: RAILWAY_PUBLIC_DOMAIN, HOST_URL, ALLOWED_ORIGINS
+- Email: SMTP_* or RESEND_*; SUPPORT_* addresses
+- Privacy: COLLECT_CLIENT_IP, ANALYTICS_IP_SALT
