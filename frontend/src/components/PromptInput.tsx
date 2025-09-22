@@ -35,21 +35,11 @@ export const PromptInput = ({
   const MIN_HEIGHT = 40; // px (~1-2 lines, tailwind h-10)
   const MAX_HEIGHT = 192; // px (tailwind max-h-48)
 
-  // Server request size limit (matches backend RequestSizeLimitMiddleware: 10 MB)
-  const SERVER_MAX_BYTES = 10 * 1024 * 1024;
-  // Buffer to account for JSON envelope and headers
-  const SAFETY_BUFFER_BYTES = 100 * 1024; // 100KB
-
-  const estimateBase64Bytes = (rawBytes: number): number => {
-    // Base64 increases size to ~4/3 of original bytes
-    return Math.ceil((rawBytes / 3) * 4);
-  };
-
-  const willExceedServerLimit = (f: File[]): boolean => {
-    const totalRaw = f.reduce((sum, file) => sum + file.size, 0);
-    const estimatedB64 = estimateBase64Bytes(totalRaw);
-    return estimatedB64 + SAFETY_BUFFER_BYTES > SERVER_MAX_BYTES;
-  };
+  // Local per-file attachment size limit: 5 MB
+  const MAX_FILE_BYTES = 5 * 1024 * 1024;
+  const isOversizeFile = (file: File): boolean => file.size > MAX_FILE_BYTES;
+  const formatMb = (bytes: number): string =>
+    (bytes / (1024 * 1024)).toFixed(1);
 
   const adjustTextareaSize = () => {
     const el = textareaRef.current;
@@ -86,18 +76,22 @@ export const PromptInput = ({
     const trimmed = value.trim();
     if (!trimmed && files.length === 0) return;
 
-    // Prevent sending if attachments would exceed server-side 10MB limit
-    if (files.length > 0 && willExceedServerLimit(files)) {
-      const totalRaw = files.reduce((sum, file) => sum + file.size, 0);
-      const estB64Mb = (estimateBase64Bytes(totalRaw) / (1024 * 1024)).toFixed(
-        1
-      );
-      toast({
-        variant: "destructive",
-        title: "Tệp đính kèm quá lớn",
-        description: `Tổng dung lượng tệp (sau mã hoá) vượt giới hạn 10 MB (ước tính ~${estB64Mb} MB). Hãy xoá bớt hoặc chọn tệp nhỏ hơn.`,
-      });
-      return;
+    // Guard: prevent sending if any attachment exceeds 5 MB
+    if (files.length > 0) {
+      const overs = files.filter((f) => isOversizeFile(f));
+      if (overs.length > 0) {
+        const names = overs
+          .slice(0, 2)
+          .map((f) => `${f.name} (${formatMb(f.size)} MB)`)
+          .join(", ");
+        const more = overs.length > 2 ? ` và ${overs.length - 2} tệp khác` : "";
+        toast({
+          variant: "destructive",
+          title: "Tệp quá lớn",
+          description: `${names}${more}. Giới hạn mỗi tệp là 5 MB.`,
+        });
+        return;
+      }
     }
 
     if (onSubmit) {
@@ -185,30 +179,32 @@ export const PromptInput = ({
               accept={ACCEPT}
               className="hidden"
               onChange={(e) => {
-                const list = Array.from(e.target.files ?? []);
+                const picked = Array.from(e.target.files ?? []);
                 setFiles((prev) => {
-                  const byName = new Set(
+                  const byKey = new Set(
                     prev.map((f) => f.name + ":" + f.size + ":" + f.type)
                   );
-                  const dedup = list.filter(
-                    (f) => !byName.has(f.name + ":" + f.size + ":" + f.type)
+                  const dedup = picked.filter(
+                    (f) => !byKey.has(f.name + ":" + f.size + ":" + f.type)
                   );
-                  const next = [...prev, ...dedup];
-                  if (next.length > 0 && willExceedServerLimit(next)) {
-                    const totalRaw = next.reduce(
-                      (sum, file) => sum + file.size,
-                      0
-                    );
-                    const estB64Mb = (
-                      estimateBase64Bytes(totalRaw) /
-                      (1024 * 1024)
-                    ).toFixed(1);
+                  const invalid = dedup.filter((f) => isOversizeFile(f));
+                  const valid = dedup.filter((f) => !isOversizeFile(f));
+                  if (invalid.length > 0) {
+                    const names = invalid
+                      .slice(0, 2)
+                      .map((f) => `${f.name} (${formatMb(f.size)} MB)`)
+                      .join(", ");
+                    const more =
+                      invalid.length > 2
+                        ? ` và ${invalid.length - 2} tệp khác`
+                        : "";
                     toast({
                       variant: "destructive",
-                      title: "Vượt giới hạn dung lượng",
-                      description: `Tổng tệp (sau mã hoá) ước tính ~${estB64Mb} MB > 10 MB. Hãy chọn tệp nhỏ hơn hoặc xóa bớt nội dung tệp.`,
+                      title: "Tệp quá lớn",
+                      description: `${names}${more}. Giới hạn mỗi tệp là 5 MB.`,
                     });
                   }
+                  const next = valid.length > 0 ? [...prev, ...valid] : prev;
                   return next;
                 });
                 if (fileInputRef.current) fileInputRef.current.value = "";
@@ -235,9 +231,7 @@ export const PromptInput = ({
               <Send className="mr-1" /> {ctaLabel}
             </Button>
           </div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            Giới hạn dung lượng tệp: 10 MB sau mã hóa (6.7 MB raw).
-          </div>
+          {/* Removed inline limit note per UX feedback; oversize handled via toast */}
         </div>
       </div>
       <div className="mt-2 text-xs text-muted-foreground text-center flex items-center justify-center gap-2">

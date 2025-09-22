@@ -29,18 +29,37 @@ const getTypeLabelFromMimeOrName = (mime?: string, name?: string): string => {
   return (ext || "File").toUpperCase();
 };
 
-export const AttachmentList = ({ files, media, onRemoveFile, className, variant = "default" }: AttachmentListProps) => {
+const formatMb = (bytes?: number): string => {
+  if (typeof bytes !== "number" || isNaN(bytes)) return "";
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+export const AttachmentList = ({
+  files,
+  media,
+  onRemoveFile,
+  className,
+  variant = "default",
+}: AttachmentListProps) => {
   const hasFiles = Array.isArray(files) && files.length > 0;
   const hasMedia = Array.isArray(media) && media.length > 0;
   if (!hasFiles && !hasMedia) return null;
 
   return (
-    <div className={cn("mb-2 flex items-center gap-2 overflow-x-auto p-1", className)}>
+    <div
+      className={cn(
+        "mb-2 flex items-center gap-2 overflow-x-auto p-1",
+        className
+      )}
+    >
       {files?.map((f, idx) => {
         const isImage = (f.type || "").startsWith("image/");
         if (isImage) {
           return (
-            <div key={f.name + f.size + idx} className="relative h-12 w-12 flex-shrink-0">
+            <div
+              key={f.name + f.size + idx}
+              className="relative h-12 w-12 flex-shrink-0"
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={URL.createObjectURL(f)}
@@ -50,6 +69,17 @@ export const AttachmentList = ({ files, media, onRemoveFile, className, variant 
                   variant === "onAccent" ? "border-white/30" : "border-gray-200"
                 )}
               />
+              <div
+                className={cn(
+                  "absolute bottom-0 left-0 right-0 text-[9px] leading-none px-1 py-0.5 truncate",
+                  variant === "onAccent"
+                    ? "bg-black/40 text-white"
+                    : "bg-black/50 text-white"
+                )}
+                title={formatMb(f.size)}
+              >
+                {formatMb(f.size)}
+              </div>
               {onRemoveFile ? (
                 <button
                   type="button"
@@ -76,14 +106,33 @@ export const AttachmentList = ({ files, media, onRemoveFile, className, variant 
             <div
               className={cn(
                 "h-8 w-8 rounded-full grid place-items-center",
-                variant === "onAccent" ? "bg-white/90 text-black ring-1 ring-white/50" : "bg-gray-200 text-gray-800 ring-1 ring-gray-300"
+                variant === "onAccent"
+                  ? "bg-white/90 text-black ring-1 ring-white/50"
+                  : "bg-gray-200 text-gray-800 ring-1 ring-gray-300"
               )}
             >
               <FileIcon className="h-4 w-4" strokeWidth={2} />
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-medium truncate" title={f.name}>{f.name}</div>
-              <div className={cn("text-[10px] uppercase", variant === "onAccent" ? "text-white/70" : "text-gray-600")}>{getTypeLabelFromMimeOrName(f.type, f.name)}</div>
+              <div className="text-xs font-medium truncate" title={f.name}>
+                {f.name}
+              </div>
+              <div
+                className={cn(
+                  "text-[10px] uppercase flex items-center gap-2",
+                  variant === "onAccent" ? "text-white/70" : "text-gray-600"
+                )}
+              >
+                <span>{getTypeLabelFromMimeOrName(f.type, f.name)}</span>
+                <span
+                  className={cn(
+                    "normal-case",
+                    variant === "onAccent" ? "text-white/70" : "text-gray-500"
+                  )}
+                >
+                  {formatMb(f.size)}
+                </span>
+              </div>
             </div>
             {onRemoveFile ? (
               <button
@@ -103,7 +152,10 @@ export const AttachmentList = ({ files, media, onRemoveFile, className, variant 
         const isImage = (m.mediaType || "").startsWith("image/");
         if (isImage && m.src) {
           return (
-            <div key={(m.identifier || m.src) + idx} className="relative h-12 w-12 flex-shrink-0">
+            <div
+              key={(m.identifier || m.src) + idx}
+              className="relative h-12 w-12 flex-shrink-0"
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={m.src}
@@ -130,14 +182,25 @@ export const AttachmentList = ({ files, media, onRemoveFile, className, variant 
             <div
               className={cn(
                 "h-8 w-8 rounded-full grid place-items-center",
-                variant === "onAccent" ? "bg-white/90 text-black ring-1 ring-white/50" : "bg-gray-200 text-gray-800 ring-1 ring-gray-300"
+                variant === "onAccent"
+                  ? "bg-white/90 text-black ring-1 ring-white/50"
+                  : "bg-gray-200 text-gray-800 ring-1 ring-gray-300"
               )}
             >
               <FileIcon className="h-4 w-4" strokeWidth={2} />
             </div>
             <div className="min-w-0">
-              <div className="text-xs font-medium truncate" title={displayName}>{displayName}</div>
-              <div className={cn("text-[10px] uppercase", variant === "onAccent" ? "text-white/70" : "text-gray-600")}>{getTypeLabelFromMimeOrName(m.mediaType, m.identifier)}</div>
+              <div className="text-xs font-medium truncate" title={displayName}>
+                {displayName}
+              </div>
+              <div
+                className={cn(
+                  "text-[10px] uppercase",
+                  variant === "onAccent" ? "text-white/70" : "text-gray-600"
+                )}
+              >
+                {getTypeLabelFromMimeOrName(m.mediaType, m.identifier)}
+              </div>
             </div>
           </div>
         );
@@ -147,5 +210,3 @@ export const AttachmentList = ({ files, media, onRemoveFile, className, variant 
 };
 
 export default AttachmentList;
-
-

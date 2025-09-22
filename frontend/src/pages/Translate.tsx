@@ -31,13 +31,11 @@ const Translate = () => {
   const abortRef = useRef<AbortController | null>(null);
   const { toast } = useToast();
 
-  // Match backend limit: 10 MB request body (JSON+base64 inflates ~33%)
-  const SERVER_MAX_BYTES = 10 * 1024 * 1024;
-  const SAFETY_BUFFER_BYTES = 100 * 1024;
-  const estimateBase64Bytes = (rawBytes: number): number =>
-    Math.ceil((rawBytes / 3) * 4);
-  const exceedsLimit = (f: File): boolean =>
-    estimateBase64Bytes(f.size) + SAFETY_BUFFER_BYTES > SERVER_MAX_BYTES;
+  // Local per-file limit for UX: 5 MB
+  const MAX_FILE_BYTES = 5 * 1024 * 1024;
+  const exceedsLimit = (f: File): boolean => f.size > MAX_FILE_BYTES;
+  const formatMb = (bytes: number): string =>
+    (bytes / (1024 * 1024)).toFixed(1);
 
   useEffect(() => {
     return () => {
@@ -97,11 +95,12 @@ const Translate = () => {
   const handleSubmitFile = async () => {
     if (submitting || !file) return;
     if (exceedsLimit(file)) {
-      const estMb = (estimateBase64Bytes(file.size) / (1024 * 1024)).toFixed(1);
       toast({
         variant: "destructive",
         title: "Tệp quá lớn",
-        description: `Tệp (sau mã hoá) ước tính ~${estMb} MB, vượt giới hạn 10 MB. Hãy chọn tệp nhỏ hơn.`,
+        description: `${file.name} (${formatMb(
+          file.size
+        )} MB). Giới hạn mỗi tệp là 5 MB.`,
       });
       return;
     }
@@ -254,7 +253,7 @@ const Translate = () => {
                         Tải file của bạn lên. OpenHay dịch nhanh, rõ ý, dễ đọc.
                       </p>
                       <p className="text-xs text-muted-foreground mt-1">
-                        Giới hạn: 10 MB tổng dung lượng sau mã hóa (6.7 MB raw).
+                        Giới hạn mỗi tệp: 5 MB.
                       </p>
                     </div>
                     <FileUploader
@@ -266,14 +265,12 @@ const Translate = () => {
                         );
                         const f = first ? first.file : null;
                         if (f && exceedsLimit(f)) {
-                          const estMb = (
-                            estimateBase64Bytes(f.size) /
-                            (1024 * 1024)
-                          ).toFixed(1);
                           toast({
                             variant: "destructive",
-                            title: "Vượt giới hạn dung lượng",
-                            description: `Tệp (sau mã hoá) ước tính ~${estMb} MB > 10 MB. Hãy chọn tệp nhỏ hơn.`,
+                            title: "Tệp quá lớn",
+                            description: `${f.name} (${formatMb(
+                              f.size
+                            )} MB). Giới hạn mỗi tệp là 5 MB.`,
                           });
                           setFile(null);
                         } else {
