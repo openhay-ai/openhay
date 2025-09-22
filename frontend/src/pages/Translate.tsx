@@ -4,6 +4,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import FileUploader, { UploadItem } from "@/components/translate/FileUploader";
+import { exceedsFileLimit, formatMb, MAX_UPLOAD_FILE_BYTES } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -31,11 +32,8 @@ const Translate = () => {
   const abortRef = useRef<AbortController | null>(null);
   const { toast } = useToast();
 
-  // Local per-file limit for UX: 5 MB
-  const MAX_FILE_BYTES = 5 * 1024 * 1024;
-  const exceedsLimit = (f: File): boolean => f.size > MAX_FILE_BYTES;
-  const formatMb = (bytes: number): string =>
-    (bytes / (1024 * 1024)).toFixed(1);
+  // Shared helpers
+  const exceedsLimit = (f: File): boolean => exceedsFileLimit(f, MAX_UPLOAD_FILE_BYTES);
 
   useEffect(() => {
     return () => {
@@ -252,30 +250,24 @@ const Translate = () => {
                       <p className="text-sm text-muted-foreground">
                         Tải file của bạn lên. OpenHay dịch nhanh, rõ ý, dễ đọc.
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Giới hạn mỗi tệp: 5 MB.
-                      </p>
                     </div>
                     <FileUploader
                       accept={ACCEPT}
                       multiple={false}
+                      maxBytes={MAX_UPLOAD_FILE_BYTES}
+                      onRejected={(files) => {
+                        if (!files?.length) return;
+                        const f = files[0];
+                        toast({
+                          variant: "destructive",
+                          title: "Tệp quá lớn",
+                          description: `${f.name} (${formatMb(f.size)} MB). Giới hạn mỗi tệp là 5 MB.`,
+                        });
+                      }}
                       onChange={(items: UploadItem[]) => {
-                        const first = items.find(
-                          (i) => i.status === "complete"
-                        );
+                        const first = items.find((i) => i.status === "complete");
                         const f = first ? first.file : null;
-                        if (f && exceedsLimit(f)) {
-                          toast({
-                            variant: "destructive",
-                            title: "Tệp quá lớn",
-                            description: `${f.name} (${formatMb(
-                              f.size
-                            )} MB). Giới hạn mỗi tệp là 5 MB.`,
-                          });
-                          setFile(null);
-                        } else {
-                          setFile(f);
-                        }
+                        setFile(f);
                       }}
                     />
                     <div className="flex justify-end">

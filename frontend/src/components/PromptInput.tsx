@@ -3,6 +3,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Paperclip, Send, Linkedin } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { exceedsFileLimit, formatMb, MAX_UPLOAD_FILE_BYTES } from "@/lib/utils";
 import AttachmentList from "@/components/AttachmentList";
 
 export type PromptInputProps = {
@@ -35,11 +36,8 @@ export const PromptInput = ({
   const MIN_HEIGHT = 40; // px (~1-2 lines, tailwind h-10)
   const MAX_HEIGHT = 192; // px (tailwind max-h-48)
 
-  // Local per-file attachment size limit: 5 MB
-  const MAX_FILE_BYTES = 5 * 1024 * 1024;
-  const isOversizeFile = (file: File): boolean => file.size > MAX_FILE_BYTES;
-  const formatMb = (bytes: number): string =>
-    (bytes / (1024 * 1024)).toFixed(1);
+  // Shared per-file attachment size limit helpers
+  const isOversizeFile = (file: File): boolean => exceedsFileLimit(file, MAX_UPLOAD_FILE_BYTES);
 
   const adjustTextareaSize = () => {
     const el = textareaRef.current;
