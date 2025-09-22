@@ -3,6 +3,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Paperclip, Send, Linkedin } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { exceedsFileLimit, formatMb, MAX_UPLOAD_FILE_BYTES } from "@/lib/utils";
 import AttachmentList from "@/components/AttachmentList";
 
 export type PromptInputProps = {
@@ -34,6 +35,9 @@ export const PromptInput = ({
 
   const MIN_HEIGHT = 40; // px (~1-2 lines, tailwind h-10)
   const MAX_HEIGHT = 192; // px (tailwind max-h-48)
+
+  // Shared per-file attachment size limit helpers
+  const isOversizeFile = (file: File): boolean => exceedsFileLimit(file, MAX_UPLOAD_FILE_BYTES);
 
   const adjustTextareaSize = () => {
     const el = textareaRef.current;
@@ -70,6 +74,24 @@ export const PromptInput = ({
     const trimmed = value.trim();
     if (!trimmed && files.length === 0) return;
 
+    // Guard: prevent sending if any attachment exceeds 5 MB
+    if (files.length > 0) {
+      const overs = files.filter((f) => isOversizeFile(f));
+      if (overs.length > 0) {
+        const names = overs
+          .slice(0, 2)
+          .map((f) => `${f.name} (${formatMb(f.size)} MB)`)
+          .join(", ");
+        const more = overs.length > 2 ? ` và ${overs.length - 2} tệp khác` : "";
+        toast({
+          variant: "destructive",
+          title: "Tệp quá lớn",
+          description: `${names}${more}. Giới hạn mỗi tệp là 5 MB.`,
+        });
+        return;
+      }
+    }
+
     if (onSubmit) {
       const filesSnapshot = files.slice();
       const valueSnapshot = trimmed;
@@ -84,10 +106,11 @@ export const PromptInput = ({
         // Restore previous state on error and show toast
         setValue(valueSnapshot);
         setFiles(filesSnapshot);
-        console.log(err)
-        const description = typeof err?.message === "string" && err.message.trim().length > 0
-          ? err.message
-          : "Đã xảy ra lỗi khi gửi. Vui lòng thử lại.";
+        console.log(err);
+        const description =
+          typeof err?.message === "string" && err.message.trim().length > 0
+            ? err.message
+            : "Đã xảy ra lỗi khi gửi. Vui lòng thử lại.";
         toast({ variant: "destructive", title: "Gửi thất bại", description });
       }
       // After submit, ensure textarea size is recalculated
@@ -154,11 +177,33 @@ export const PromptInput = ({
               accept={ACCEPT}
               className="hidden"
               onChange={(e) => {
-                const list = Array.from(e.target.files ?? []);
+                const picked = Array.from(e.target.files ?? []);
                 setFiles((prev) => {
-                  const byName = new Set(prev.map((f) => f.name + ":" + f.size + ":" + f.type));
-                  const dedup = list.filter((f) => !byName.has(f.name + ":" + f.size + ":" + f.type));
-                  return [...prev, ...dedup];
+                  const byKey = new Set(
+                    prev.map((f) => f.name + ":" + f.size + ":" + f.type)
+                  );
+                  const dedup = picked.filter(
+                    (f) => !byKey.has(f.name + ":" + f.size + ":" + f.type)
+                  );
+                  const invalid = dedup.filter((f) => isOversizeFile(f));
+                  const valid = dedup.filter((f) => !isOversizeFile(f));
+                  if (invalid.length > 0) {
+                    const names = invalid
+                      .slice(0, 2)
+                      .map((f) => `${f.name} (${formatMb(f.size)} MB)`)
+                      .join(", ");
+                    const more =
+                      invalid.length > 2
+                        ? ` và ${invalid.length - 2} tệp khác`
+                        : "";
+                    toast({
+                      variant: "destructive",
+                      title: "Tệp quá lớn",
+                      description: `${names}${more}. Giới hạn mỗi tệp là 5 MB.`,
+                    });
+                  }
+                  const next = valid.length > 0 ? [...prev, ...valid] : prev;
+                  return next;
                 });
                 if (fileInputRef.current) fileInputRef.current.value = "";
               }}
@@ -174,23 +219,53 @@ export const PromptInput = ({
               <Paperclip />
             </Button>
             <div className="flex-1" />
-            <Button type="submit" variant="hero" size="xl" aria-label="Gửi câu hỏi" disabled={disabled}>
+            <Button
+              type="submit"
+              variant="hero"
+              size="xl"
+              aria-label="Gửi câu hỏi"
+              disabled={disabled}
+            >
               <Send className="mr-1" /> {ctaLabel}
             </Button>
           </div>
+          {/* Removed inline limit note per UX feedback; oversize handled via toast */}
         </div>
       </div>
       <div className="mt-2 text-xs text-muted-foreground text-center flex items-center justify-center gap-2">
-        <a href="https://github.com/openhay-ai/openhay" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1">
-          <svg role="img" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" className="w-4 h-4"><title>GitHub</title><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
-           openhay-ai
+        <a
+          href="https://github.com/openhay-ai/openhay"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1"
+        >
+          <svg
+            role="img"
+            viewBox="0 0 24 24"
+            xmlns="http://www.w3.org/2000/svg"
+            className="w-4 h-4"
+          >
+            <title>GitHub</title>
+            <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12" />
+          </svg>
+          openhay-ai
         </a>
         <span className="text-gray-400">•</span>
-        <a href="https://www.linkedin.com/in/tisu/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1">
+        <a
+          href="https://www.linkedin.com/in/tisu/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1"
+        >
           <Linkedin className="w-4 h-4" /> quang
         </a>
         <span className="text-gray-400">•</span>
-        <a href="https://www.linkedin.com/in/tran-nhat-quy-16b25720b/" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1">
+        <a
+          href="https://www.linkedin.com/in/tran-nhat-quy-16b25720b/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1"
+        >
           <Linkedin className="w-4 h-4" /> quy
         </a>
       </div>
@@ -203,7 +278,10 @@ export const PromptInput = ({
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-40 md:pl-64">
-      <div ref={overlayRef} className="mx-auto max-w-3xl px-3 md:px-6 pb-4 pt-2 bg-gradient-to-t from-background/95 to-background/60 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div
+        ref={overlayRef}
+        className="mx-auto max-w-3xl px-3 md:px-6 pb-4 pt-2 bg-gradient-to-t from-background/95 to-background/60 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+      >
         {formEl}
       </div>
     </div>

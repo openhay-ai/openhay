@@ -144,3 +144,14 @@ export function stripHtml(input: string | undefined | null): string {
   out = out.replace(/\s+/g, " ").trim();
   return out;
 }
+
+// Shared upload limits and helpers (used by translate and prompt input)
+export const MAX_UPLOAD_FILE_BYTES = 5 * 1024 * 1024; // 5 MB
+
+export function exceedsFileLimit(file: File, limitBytes: number = MAX_UPLOAD_FILE_BYTES): boolean {
+  return file.size > limitBytes;
+}
+
+export function formatMb(bytes: number): string {
+  return (bytes / (1024 * 1024)).toFixed(1);
+}
