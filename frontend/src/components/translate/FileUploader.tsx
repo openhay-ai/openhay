@@ -21,6 +21,8 @@ export type FileUploaderProps = {
   accept: string;
   multiple?: boolean;
   onChange?: (items: UploadItem[]) => void;
+  maxBytes?: number;
+  onRejected?: (files: File[], reason?: string) => void; // reason: e.g., "oversize"
 };
 
 function formatBytes(bytes: number): string {
@@ -31,7 +33,7 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
-const FileUploader = ({ accept, multiple = true, onChange }: FileUploaderProps) => {
+const FileUploader = ({ accept, multiple = true, onChange, maxBytes, onRejected }: FileUploaderProps) => {
   const [items, setItems] = useState<UploadItem[]>([]);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -76,7 +78,23 @@ const FileUploader = ({ accept, multiple = true, onChange }: FileUploaderProps) 
   };
 
   const addFiles = (files: File[]) => {
-    const newItems: UploadItem[] = files.map((f) => ({
+    let acceptedFiles = files;
+    let rejectedFiles: File[] = [];
+    if (typeof maxBytes === "number" && Number.isFinite(maxBytes)) {
+      rejectedFiles = files.filter((f) => f.size > (maxBytes as number));
+      acceptedFiles = files.filter((f) => f.size <= (maxBytes as number));
+      if (rejectedFiles.length > 0 && typeof onRejected === "function") {
+        try {
+          onRejected(rejectedFiles, "oversize");
+        } catch {}
+      }
+    }
+
+    if (acceptedFiles.length === 0) {
+      return;
+    }
+
+    const newItems: UploadItem[] = acceptedFiles.map((f) => ({
       id: crypto.randomUUID(),
       file: f,
       name: f.name,
@@ -145,6 +163,7 @@ const FileUploader = ({ accept, multiple = true, onChange }: FileUploaderProps) 
           <span className="text-muted-foreground"> hoặc kéo thả</span>
         </div>
         <div className="text-xs text-muted-foreground">PDF, DOCX, XLS, TXT, MD, HTML</div>
+        <div className="text-xs text-muted-foreground">Giới hạn mỗi tệp: {formatBytes(maxBytes || 0)}</div>
         <input
           ref={inputRef}
           type="file"

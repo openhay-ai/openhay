@@ -255,8 +255,27 @@ const FeatureChat = () => {
               signal: ac.signal,
             });
             const res = await fetch(endpoint, init);
-            if (!res.ok || !res.body)
+            if (!res.ok || !res.body) {
+              if (res.status === 413) {
+                const friendly =
+                  "Tệp đính kèm quá lớn (giới hạn 10 MB sau mã hoá). Hãy chọn tệp nhỏ hơn hoặc xoá bớt nội dung tệp.";
+                setErrorNotice({ message: friendly });
+                setMessages((prev) =>
+                  prev.map((m) =>
+                    m.id === translateRun.assistantId
+                      ? {
+                          ...m,
+                          content:
+                            m.content && m.content.trim().length > 0
+                              ? m.content
+                              : `> ${friendly}`,
+                        }
+                      : m
+                  )
+                );
+              }
               throw new Error(`Bad response: ${res.status}`);
+            }
             const reader = res.body.getReader();
             const decoder: any = new TextDecoder("utf-8");
             let buffer = "";
