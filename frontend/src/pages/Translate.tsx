@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import FileUploader, { UploadItem } from "@/components/translate/FileUploader";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useToast } from "@/hooks/use-toast";
 
 const ACCEPT = [
   ".pdf",
@@ -28,6 +29,15 @@ const Translate = () => {
   const [targetLang, setTargetLang] = useState("Tiếng Việt");
   const [submitting, setSubmitting] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const { toast } = useToast();
+
+  // Match backend limit: 10 MB request body (JSON+base64 inflates ~33%)
+  const SERVER_MAX_BYTES = 10 * 1024 * 1024;
+  const SAFETY_BUFFER_BYTES = 100 * 1024;
+  const estimateBase64Bytes = (rawBytes: number): number =>
+    Math.ceil((rawBytes / 3) * 4);
+  const exceedsLimit = (f: File): boolean =>
+    estimateBase64Bytes(f.size) + SAFETY_BUFFER_BYTES > SERVER_MAX_BYTES;
 
   useEffect(() => {
     return () => {
@@ -60,12 +70,23 @@ const Translate = () => {
         role: "user" as const,
         content: message,
       };
-      const assistantMsg = { id: crypto.randomUUID(), role: "assistant" as const, content: "" };
+      const assistantMsg = {
+        id: crypto.randomUUID(),
+        role: "assistant" as const,
+        content: "",
+      };
       navigate(`/t/pending`, {
         replace: true,
         state: {
           preloadMessages: [userMsg, assistantMsg],
-          translateRun: { kind: "link", url: pureUrl, source_lang: sourceLang, target_lang: targetLang, assistantId: assistantMsg.id, message },
+          translateRun: {
+            kind: "link",
+            url: pureUrl,
+            source_lang: sourceLang,
+            target_lang: targetLang,
+            assistantId: assistantMsg.id,
+            message,
+          },
         },
       });
     } finally {
@@ -75,25 +96,57 @@ const Translate = () => {
 
   const handleSubmitFile = async () => {
     if (submitting || !file) return;
+    if (exceedsLimit(file)) {
+      const estMb = (estimateBase64Bytes(file.size) / (1024 * 1024)).toFixed(1);
+      toast({
+        variant: "destructive",
+        title: "Tệp quá lớn",
+        description: `Tệp (sau mã hoá) ước tính ~${estMb} MB, vượt giới hạn 10 MB. Hãy chọn tệp nhỏ hơn.`,
+      });
+      return;
+    }
     setSubmitting(true);
     try {
-      const toDataUrl = (f: File) => new Promise<string>((resolve, reject) => { const r = new FileReader(); r.onerror = () => reject(r.error); r.onload = () => resolve(String(r.result || "")); r.readAsDataURL(f); });
+      const toDataUrl = (f: File) =>
+        new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onerror = () => reject(r.error);
+          r.onload = () => resolve(String(r.result || ""));
+          r.readAsDataURL(f);
+        });
       const dataUrl = await toDataUrl(file);
       const commaIdx = dataUrl.indexOf(",");
       const base64Data = commaIdx >= 0 ? dataUrl.slice(commaIdx + 1) : dataUrl;
-      const media = [{ data: base64Data, media_type: file.type || "application/octet-stream", identifier: file.name }];
+      const media = [
+        {
+          data: base64Data,
+          media_type: file.type || "application/octet-stream",
+          identifier: file.name,
+        },
+      ];
       const message = `Dịch từ '${sourceLang}' sang '${targetLang}' cho file '${file.name}'`;
       const userMsg = {
         id: crypto.randomUUID(),
         role: "user" as const,
         content: message,
       };
-      const assistantMsg = { id: crypto.randomUUID(), role: "assistant" as const, content: "" };
+      const assistantMsg = {
+        id: crypto.randomUUID(),
+        role: "assistant" as const,
+        content: "",
+      };
       navigate(`/t/pending`, {
         replace: true,
         state: {
           preloadMessages: [userMsg, assistantMsg],
-          translateRun: { kind: "file", media, source_lang: sourceLang, target_lang: targetLang, assistantId: assistantMsg.id, message },
+          translateRun: {
+            kind: "file",
+            media,
+            source_lang: sourceLang,
+            target_lang: targetLang,
+            assistantId: assistantMsg.id,
+            message,
+          },
         },
       });
     } finally {
@@ -109,7 +162,9 @@ const Translate = () => {
           <header className="flex justify-between items-center gap-3 py-4">
             <div>
               <h1 className="text-2xl font-semibold">AI Dịch thuật</h1>
-              <p className="text-muted-foreground text-sm">Chọn phương thức dịch. OpenHay dịch mượt, giữ đúng thuật ngữ.</p>
+              <p className="text-muted-foreground text-sm">
+                Chọn phương thức dịch. OpenHay dịch mượt, giữ đúng thuật ngữ.
+              </p>
             </div>
           </header>
 
@@ -127,18 +182,37 @@ const Translate = () => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <Label htmlFor="source-lang">Dịch từ</Label>
-                      <Input id="source-lang" className="h-10" value={sourceLang} onChange={(e) => setSourceLang(e.target.value)} placeholder="Tự động" aria-label="Dịch từ" />
+                      <Input
+                        id="source-lang"
+                        className="h-10"
+                        value={sourceLang}
+                        onChange={(e) => setSourceLang(e.target.value)}
+                        placeholder="Tự động"
+                        aria-label="Dịch từ"
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor="target-lang">Dịch sang</Label>
-                      <Input id="target-lang" className="h-10" value={targetLang} onChange={(e) => setTargetLang(e.target.value)} placeholder="Tiếng Việt" aria-label="Sang" />
+                      <Input
+                        id="target-lang"
+                        className="h-10"
+                        value={targetLang}
+                        onChange={(e) => setTargetLang(e.target.value)}
+                        placeholder="Tiếng Việt"
+                        aria-label="Sang"
+                      />
                     </div>
                   </div>
 
                   <TabsContent value="link" className="space-y-3">
                     <div>
-                      <h3 className="font-medium">Dịch bài viết từ một liên kết</h3>
-                      <p className="text-sm text-muted-foreground">Dán URL, chọn ngôn ngữ. OpenHay sẽ dịch mượt, giữ đúng thuật ngữ.</p>
+                      <h3 className="font-medium">
+                        Dịch bài viết từ một liên kết
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Dán URL, chọn ngôn ngữ. OpenHay sẽ dịch mượt, giữ đúng
+                        thuật ngữ.
+                      </p>
                     </div>
                     <div className="flex items-center gap-3">
                       <Input
@@ -148,13 +222,23 @@ const Translate = () => {
                           const v = e.target.value;
                           setUrl(v);
                           const t = v.trim();
-                          setUrlError(t.length === 0 ? null : isValidHttpUrl(t) ? null : "URL không hợp lệ");
+                          setUrlError(
+                            t.length === 0
+                              ? null
+                              : isValidHttpUrl(t)
+                              ? null
+                              : "URL không hợp lệ"
+                          );
                         }}
                         aria-invalid={!!urlError}
                         placeholder="https://..."
                         aria-label="URL cần dịch"
                       />
-                      <Button className="shrink-0" onClick={handleSubmitLink} disabled={submitting || !url.trim() || !!urlError}>
+                      <Button
+                        className="shrink-0"
+                        onClick={handleSubmitLink}
+                        disabled={submitting || !url.trim() || !!urlError}
+                      >
                         Dịch
                       </Button>
                     </div>
@@ -166,18 +250,42 @@ const Translate = () => {
                   <TabsContent value="file" className="space-y-3">
                     <div>
                       <h3 className="font-medium">Dịch tài liệu từ file</h3>
-                      <p className="text-sm text-muted-foreground">Tải file của bạn lên. OpenHay dịch nhanh, rõ ý, dễ đọc.</p>
+                      <p className="text-sm text-muted-foreground">
+                        Tải file của bạn lên. OpenHay dịch nhanh, rõ ý, dễ đọc.
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Giới hạn: 10 MB tổng dung lượng sau mã hóa (6.7 MB raw).
+                      </p>
                     </div>
                     <FileUploader
                       accept={ACCEPT}
                       multiple={false}
                       onChange={(items: UploadItem[]) => {
-                        const first = items.find((i) => i.status === "complete");
-                        setFile(first ? first.file : null);
+                        const first = items.find(
+                          (i) => i.status === "complete"
+                        );
+                        const f = first ? first.file : null;
+                        if (f && exceedsLimit(f)) {
+                          const estMb = (
+                            estimateBase64Bytes(f.size) /
+                            (1024 * 1024)
+                          ).toFixed(1);
+                          toast({
+                            variant: "destructive",
+                            title: "Vượt giới hạn dung lượng",
+                            description: `Tệp (sau mã hoá) ước tính ~${estMb} MB > 10 MB. Hãy chọn tệp nhỏ hơn.`,
+                          });
+                          setFile(null);
+                        } else {
+                          setFile(f);
+                        }
                       }}
                     />
                     <div className="flex justify-end">
-                      <Button onClick={handleSubmitFile} disabled={submitting || !file}>
+                      <Button
+                        onClick={handleSubmitFile}
+                        disabled={submitting || !file}
+                      >
                         Dịch
                       </Button>
                     </div>
