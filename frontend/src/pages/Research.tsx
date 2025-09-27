@@ -66,7 +66,11 @@ const Research = () => {
       "Nghiên cứu đang chạy. Rời trang bây giờ sẽ làm mất tiến trình và kết quả. Bạn có chắc muốn rời đi?";
 
     const isModifiedEvent = (e: MouseEvent) =>
-      e.metaKey || e.altKey || e.ctrlKey || e.shiftKey || (e.button && e.button !== 0);
+      e.metaKey ||
+      e.altKey ||
+      e.ctrlKey ||
+      e.shiftKey ||
+      (e.button && e.button !== 0);
 
     const findAnchor = (el: Element | null): HTMLAnchorElement | null => {
       let cur: Element | null = el;
@@ -208,7 +212,12 @@ const Research = () => {
       const pushThinking = (text: string, ts?: number) => {
         setThinkingEntries((prev) => [
           ...prev,
-          { id: crypto.randomUUID(), content: text, open: true, ts: ts ?? Date.now() },
+          {
+            id: crypto.randomUUID(),
+            content: text,
+            open: true,
+            ts: ts ?? Date.now(),
+          },
         ]);
       };
 
@@ -228,32 +237,43 @@ const Research = () => {
           const dataLines: string[] = [];
           for (const line of lines) {
             if (line.startsWith("event:")) eventName = line.slice(6).trim();
-            else if (line.startsWith("data:")) dataLines.push(line.slice(5).trim());
+            else if (line.startsWith("data:"))
+              dataLines.push(line.slice(5).trim());
           }
           const dataStr = dataLines.join("\n");
 
           if (eventName === "conversation_created") {
             try {
-              const parsed = JSON.parse(dataStr) as { conversation_id?: string };
+              const parsed = JSON.parse(dataStr) as {
+                conversation_id?: string;
+              };
               if (parsed?.conversation_id) {
                 setConversationId(parsed.conversation_id);
               }
             } catch {}
           } else if (eventName === "lead_thinking") {
             try {
-              const parsed = JSON.parse(dataStr) as { thinking?: string; ts?: number };
+              const parsed = JSON.parse(dataStr) as {
+                thinking?: string;
+                ts?: number;
+              };
               const t = parsed?.thinking?.trim();
               if (t) pushThinking(t, parsed?.ts);
               if (!gotFirstThinking) setGotFirstThinking(true);
               setShowLoader(false);
             } catch {}
           } else if (eventName === "lead_answer") {
-            setLeadPlan((prev) => (prev ? prev : JSON.parse(dataStr).answer || ""));
+            setLeadPlan((prev) =>
+              prev ? prev : JSON.parse(dataStr).answer || ""
+            );
             setStep1Done(true);
             setTimelineVisible(true);
           } else if (eventName === "web_search_query") {
             try {
-              const parsed = JSON.parse(dataStr) as { id?: string; query?: string };
+              const parsed = JSON.parse(dataStr) as {
+                id?: string;
+                query?: string;
+              };
               if (!parsed?.id) continue;
               setStep2Shown(true);
               setQueries((prev) => ({
@@ -265,14 +285,23 @@ const Research = () => {
                   open: false,
                 },
               }));
-              setQueryOrder((o) => (o.includes(parsed.id as string) ? o : [...o, parsed.id as string]));
+              setQueryOrder((o) =>
+                o.includes(parsed.id as string)
+                  ? o
+                  : [...o, parsed.id as string]
+              );
             } catch {}
           } else if (eventName === "web_search_results") {
             try {
-              const parsed = JSON.parse(dataStr) as { id?: string; results?: any[] };
+              const parsed = JSON.parse(dataStr) as {
+                id?: string;
+                results?: any[];
+              };
               const rid = parsed?.id as string | undefined;
               if (!rid) continue;
-              const newResults = Array.isArray(parsed.results) ? parsed.results : [];
+              const newResults = Array.isArray(parsed.results)
+                ? parsed.results
+                : [];
               setQueries((prev) => {
                 const cur = prev[rid];
                 if (!cur) return prev;
@@ -326,10 +355,17 @@ const Research = () => {
               <div className="text-sm font-medium">{entry.query}</div>
               <div className="text-xs text-muted-foreground">{count} nguồn</div>
             </div>
-            <ChevronDown className={`size-4 transition-transform ${entry.open ? "rotate-180" : "rotate-0"}`} />
+            <ChevronDown
+              className={`size-4 transition-transform ${
+                entry.open ? "rotate-180" : "rotate-0"
+              }`}
+            />
           </button>
           {entry.open ? (
-            <div id={`q-${entry.id}`} className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div
+              id={`q-${entry.id}`}
+              className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"
+            >
               {entry.results.map((r, idx) => (
                 <SourceCard key={idx} item={r} index={idx} />
               ))}
@@ -372,15 +408,26 @@ const Research = () => {
 
   // Build link metadata for Markdown hover previews
   const linkMeta = useMemo(() => {
-    const map: Record<string, { url: string; title?: string; description?: string; hostname?: string; favicon?: string }> = {};
+    const map: Record<
+      string,
+      {
+        url: string;
+        title?: string;
+        description?: string;
+        hostname?: string;
+        favicon?: string;
+      }
+    > = {};
     for (const q of Object.values(queries)) {
       for (const it of q.results) {
         const url: string | undefined = (it as any)?.url;
         if (!url) continue;
         const key = normalizeUrlForMatch(url);
         if (map[key]) continue;
-        let hostname: string | undefined = (it as any)?.meta_url?.hostname || (it as any)?.profile?.long_name;
-        let favicon: string | undefined = (it as any)?.meta_url?.favicon || (it as any)?.profile?.img;
+        let hostname: string | undefined =
+          (it as any)?.meta_url?.hostname || (it as any)?.profile?.long_name;
+        let favicon: string | undefined =
+          (it as any)?.meta_url?.favicon || (it as any)?.profile?.img;
         let title: string | undefined = (it as any)?.title;
         let description: string | undefined = (it as any)?.description;
         if (!hostname) {
@@ -396,7 +443,7 @@ const Research = () => {
   }, [queries]);
 
   return (
-    <div className="min-h-screen flex w-full overflow-hidden">
+    <div className="min-h-screen flex flex-col md:flex-row w-full overflow-hidden">
       <SidebarNav />
 
       <div className="md:flex-auto overflow-hidden w-full md:ml-64">
@@ -404,38 +451,55 @@ const Research = () => {
           <header className="flex justify-between items-center gap-3 py-4">
             <div>
               <h1 className="text-2xl font-semibold">Nghiên cứu chuyên sâu</h1>
-              <p className="text-muted-foreground text-sm">Trợ lý AI tự động nghiên cứu, phân tích và tổng hợp thông tin.</p>
+              <p className="text-muted-foreground text-sm">
+                Trợ lý AI tự động nghiên cứu, phân tích và tổng hợp thông tin.
+              </p>
             </div>
           </header>
 
-          <section className="max-w-3xl mx-auto" style={{ paddingBottom: Math.max(overlayHeight + 16, 64) }}>
+          <section
+            className="max-w-3xl mx-auto"
+            style={{ paddingBottom: Math.max(overlayHeight + 16, 64) }}
+          >
             <div className="flex flex-col gap-4 mt-6">
               {/* Intro helper when idle */}
               {!timelineVisible && !hasSubmitted ? (
                 <div className="rounded-lg border bg-muted/30 p-4 text-sm text-muted-foreground space-y-2">
                   <p>
-                    Khi bạn đặt câu hỏi, AI sẽ hoạt động như một trợ lý cần mẫn, thực hiện một quy trình nghiên cứu chuyên sâu có thể <b>mất vài phút</b>.
+                    Khi bạn đặt câu hỏi, AI sẽ hoạt động như một trợ lý cần mẫn,
+                    thực hiện một quy trình nghiên cứu chuyên sâu có thể{" "}
+                    <b>mất vài phút</b>.
                   </p>
                   <p>AI sẽ tự động:</p>
                   <ul className="list-disc pl-5 space-y-1">
                     <li>
-                      <strong>Lên kế hoạch:</strong> Phân tích chủ đề để xác định các hướng đi quan trọng.
+                      <strong>Lên kế hoạch:</strong> Phân tích chủ đề để xác
+                      định các hướng đi quan trọng.
                     </li>
                     <li>
-                      <strong>Tìm kiếm đa chiều:</strong> Truy vấn nhiều nguồn thông tin đáng tin cậy trên web.
+                      <strong>Tìm kiếm đa chiều:</strong> Truy vấn nhiều nguồn
+                      thông tin đáng tin cậy trên web.
                     </li>
                     <li>
-                      <strong>Tổng hợp báo cáo:</strong> Đọc hiểu, chắt lọc và viết thành một câu trả lời hoàn chỉnh kèm trích dẫn.
+                      <strong>Tổng hợp báo cáo:</strong> Đọc hiểu, chắt lọc và
+                      viết thành một câu trả lời hoàn chỉnh kèm trích dẫn.
                     </li>
                   </ul>
-                  <p>Kết quả nhận được sẽ giúp bạn tiết kiệm hàng giờ tìm tòi và có được một cái nhìn sâu sắc về vấn đề.</p>
+                  <p>
+                    Kết quả nhận được sẽ giúp bạn tiết kiệm hàng giờ tìm tòi và
+                    có được một cái nhìn sâu sắc về vấn đề.
+                  </p>
                 </div>
               ) : null}
 
               {/* User message bubble */}
               {userMessage ? (
                 <ChatMessage
-                  message={{ id: "user-msg", role: "user", content: userMessage }}
+                  message={{
+                    id: "user-msg",
+                    role: "user",
+                    content: userMessage,
+                  }}
                 />
               ) : null}
 
@@ -459,7 +523,9 @@ const Research = () => {
                   expanded={t.open}
                   onToggleExpanded={(next) =>
                     setThinkingEntries((prev) =>
-                      prev.map((x) => (x.id === t.id ? { ...x, open: next } : x))
+                      prev.map((x) =>
+                        x.id === t.id ? { ...x, open: next } : x
+                      )
                     )
                   }
                 />
@@ -469,15 +535,23 @@ const Research = () => {
               {timelineVisible ? (
                 <div className="rounded-lg border bg-muted/30 p-4 space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium text-muted-foreground">Tiến trình nghiên cứu</div>
+                    <div className="text-sm font-medium text-muted-foreground">
+                      Tiến trình nghiên cứu
+                    </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1">
                       <Clock className="size-3" />
-                      <span className="tabular-nums">{formatTime(elapsedSec)}</span>
+                      <span className="tabular-nums">
+                        {formatTime(elapsedSec)}
+                      </span>
                     </div>
                   </div>
                   {/* Step 1 */}
                   <div className="flex items-start gap-3">
-                    <div className={`mt-1 h-2 w-2 rounded-full ${step1Done ? "bg-emerald-600" : "bg-amber-500"}`} />
+                    <div
+                      className={`mt-1 h-2 w-2 rounded-full ${
+                        step1Done ? "bg-emerald-600" : "bg-amber-500"
+                      }`}
+                    />
                     <div className="flex-1">
                       <button
                         type="button"
@@ -488,7 +562,11 @@ const Research = () => {
                         <div className="text-sm font-medium">
                           {step1Done ? "Đã tạo kế hoạch" : "Đang tạo kế hoạch"}
                         </div>
-                        <ChevronDown className={`size-4 transition-transform ${step1Open ? "rotate-180" : "rotate-0"}`} />
+                        <ChevronDown
+                          className={`size-4 transition-transform ${
+                            step1Open ? "rotate-180" : "rotate-0"
+                          }`}
+                        />
                       </button>
                       {step1Open && leadPlan ? (
                         <div className="mt-2 text-sm">
@@ -501,7 +579,13 @@ const Research = () => {
                   {/* Step 2 */}
                   {step2Shown ? (
                     <div className="flex items-start gap-3">
-                      <div className={`mt-1 h-2 w-2 rounded-full ${step3Writing || step3Done ? "bg-emerald-600" : "bg-amber-500"}`} />
+                      <div
+                        className={`mt-1 h-2 w-2 rounded-full ${
+                          step3Writing || step3Done
+                            ? "bg-emerald-600"
+                            : "bg-amber-500"
+                        }`}
+                      />
                       <div className="flex-1">
                         <button
                           type="button"
@@ -510,12 +594,18 @@ const Research = () => {
                           aria-expanded={step2Open}
                         >
                           <div className="text-sm font-medium flex items-center gap-2">
-                            {step3Writing || step3Done ? "Nghiên cứu hoàn tất" : "Đang nghiên cứu"}
+                            {step3Writing || step3Done
+                              ? "Nghiên cứu hoàn tất"
+                              : "Đang nghiên cứu"}
                             <span className="inline-flex items-center justify-center h-4 min-w-[16px] px-1 rounded-full bg-secondary text-[10px]">
                               {totalSources} nguồn
                             </span>
                           </div>
-                          <ChevronDown className={`size-4 transition-transform ${step2Open ? "rotate-180" : "rotate-0"}`} />
+                          <ChevronDown
+                            className={`size-4 transition-transform ${
+                              step2Open ? "rotate-180" : "rotate-0"
+                            }`}
+                          />
                         </button>
                         {step2Open ? (
                           <div className="mt-2 space-y-2">
@@ -531,7 +621,11 @@ const Research = () => {
                   {/* Step 3 */}
                   {step3Writing || step3Done ? (
                     <div className="flex items-start gap-3">
-                      <div className={`mt-1 h-2 w-2 rounded-full ${step3Done ? "bg-emerald-600" : "bg-amber-500"}`} />
+                      <div
+                        className={`mt-1 h-2 w-2 rounded-full ${
+                          step3Done ? "bg-emerald-600" : "bg-amber-500"
+                        }`}
+                      />
                       <div className="flex-1">
                         <button
                           type="button"
@@ -539,8 +633,16 @@ const Research = () => {
                           onClick={() => setStep3Open((o) => !o)}
                           aria-expanded={step3Open}
                         >
-                          <div className="text-sm font-medium">{step3Done ? "Đã hoàn tất báo cáo!" : "Đang viết báo cáo cuối cùng"}</div>
-                          <ChevronDown className={`size-4 transition-transform ${step3Open ? "rotate-180" : "rotate-0"}`} />
+                          <div className="text-sm font-medium">
+                            {step3Done
+                              ? "Đã hoàn tất báo cáo!"
+                              : "Đang viết báo cáo cuối cùng"}
+                          </div>
+                          <ChevronDown
+                            className={`size-4 transition-transform ${
+                              step3Open ? "rotate-180" : "rotate-0"
+                            }`}
+                          />
                         </button>
                       </div>
                     </div>
@@ -551,7 +653,11 @@ const Research = () => {
               {/* Final report as AI bubble */}
               {finalReport ? (
                 <ChatMessage
-                  message={{ id: "final-report", role: "assistant", content: finalReport }}
+                  message={{
+                    id: "final-report",
+                    role: "assistant",
+                    content: finalReport,
+                  }}
                   linkMeta={linkMeta}
                 />
               ) : null}

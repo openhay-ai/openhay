@@ -33,7 +33,8 @@ const Translate = () => {
   const { toast } = useToast();
 
   // Shared helpers
-  const exceedsLimit = (f: File): boolean => exceedsFileLimit(f, MAX_UPLOAD_FILE_BYTES);
+  const exceedsLimit = (f: File): boolean =>
+    exceedsFileLimit(f, MAX_UPLOAD_FILE_BYTES);
 
   useEffect(() => {
     return () => {
@@ -152,7 +153,7 @@ const Translate = () => {
   };
 
   return (
-    <div className="min-h-screen flex w-full overflow-hidden">
+    <div className="min-h-screen flex flex-col md:flex-row w-full overflow-hidden">
       <SidebarNav />
       <div className="md:flex-auto overflow-hidden w-full md:ml-64">
         <main className="h-full overflow-auto w-full px-3 md:px-6">
@@ -261,11 +262,15 @@ const Translate = () => {
                         toast({
                           variant: "destructive",
                           title: "Tệp quá lớn",
-                          description: `${f.name} (${formatMb(f.size)} MB). Giới hạn mỗi tệp là 5 MB.`,
+                          description: `${f.name} (${formatMb(
+                            f.size
+                          )} MB). Giới hạn mỗi tệp là 5 MB.`,
                         });
                       }}
                       onChange={(items: UploadItem[]) => {
-                        const first = items.find((i) => i.status === "complete");
+                        const first = items.find(
+                          (i) => i.status === "complete"
+                        );
                         const f = first ? first.file : null;
                         setFile(f);
                       }}
