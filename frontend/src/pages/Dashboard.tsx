@@ -13,12 +13,18 @@ import {
   getMetricsTotalUsers,
 } from "@/lib/api";
 import { authFetch } from "@/lib/auth";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { RefreshCw, MessageSquare, Users } from "lucide-react";
 
 type GroupItem = { key: string; count: number };
 
-const DASHBOARD_PASSWORD = import.meta.env.VITE_DASHBOARD_PASSWORD as string | undefined;
+const DASHBOARD_PASSWORD = import.meta.env.VITE_DASHBOARD_PASSWORD as
+  | string
+  | undefined;
 
 const Dashboard = () => {
   const [password, setPassword] = useState("");
@@ -92,7 +98,7 @@ const Dashboard = () => {
 
   if (!authed) {
     return (
-      <div className="min-h-screen flex w-full overflow-hidden">
+      <div className="min-h-screen flex flex-col md:flex-row w-full overflow-hidden">
         <SidebarNav />
         <div className="md:flex-auto overflow-hidden w-full md:ml-64">
           <main className="h-full overflow-auto w-full px-3 md:px-6">
@@ -122,7 +128,7 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen flex w-full overflow-hidden">
+    <div className="min-h-screen flex flex-col md:flex-row w-full overflow-hidden">
       <SidebarNav />
       <div className="md:flex-auto overflow-hidden w-full md:ml-64">
         <main className="h-full overflow-auto w-full px-3 md:px-6">
@@ -134,14 +140,23 @@ const Dashboard = () => {
                   mode="range"
                   selected={{ from: range.from, to: range.to }}
                   onSelect={(val: any) => {
-                    const from: Date = val?.from ? startOfDay(val.from) : range.from;
+                    const from: Date = val?.from
+                      ? startOfDay(val.from)
+                      : range.from;
                     const to: Date = val?.to ? endOfDay(val.to) : range.to;
                     setRange({ from, to });
                   }}
                   numberOfMonths={2}
                 />
-                <Button variant="secondary" onClick={fetchAll} disabled={loading} size="icon">
-                  <RefreshCw className={"h-4 w-4 " + (loading ? "animate-spin" : "")} />
+                <Button
+                  variant="secondary"
+                  onClick={fetchAll}
+                  disabled={loading}
+                  size="icon"
+                >
+                  <RefreshCw
+                    className={"h-4 w-4 " + (loading ? "animate-spin" : "")}
+                  />
                 </Button>
               </div>
             </div>
@@ -154,7 +169,9 @@ const Dashboard = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-semibold">{totalMsgs ?? "-"}</div>
+                  <div className="text-3xl font-semibold">
+                    {totalMsgs ?? "-"}
+                  </div>
                 </CardContent>
               </Card>
               <Card className="rounded-xl shadow-md">
@@ -164,7 +181,9 @@ const Dashboard = () => {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-semibold">{totalUsers ?? "-"}</div>
+                  <div className="text-3xl font-semibold">
+                    {totalUsers ?? "-"}
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -237,7 +256,9 @@ function BarList({
               <div className="flex items-center gap-3">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="w-44 truncate" title={label}>{label}</span>
+                    <span className="w-44 truncate" title={label}>
+                      {label}
+                    </span>
                   </TooltipTrigger>
                   <TooltipContent>{it.key}</TooltipContent>
                 </Tooltip>

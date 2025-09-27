@@ -841,7 +841,7 @@ const FeatureChat = () => {
   // SourceCard moved to a shared component
 
   return (
-    <div className="min-h-screen flex w-full overflow-hidden">
+    <div className="min-h-screen flex flex-col md:flex-row w-full overflow-hidden">
       <SidebarNav />
 
       <div className="md:flex-auto overflow-hidden w-full md:ml-64">
