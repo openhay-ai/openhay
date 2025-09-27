@@ -35,7 +35,7 @@ const History = () => {
   }, []);
 
   return (
-    <div className="min-h-screen flex w-full overflow-hidden">
+    <div className="min-h-screen flex flex-col md:flex-row w-full overflow-hidden">
       <SidebarNav />
       <div className="md:flex-auto overflow-hidden w-full md:ml-64">
         <main className="h-full overflow-auto w-full px-3 md:px-6">
@@ -47,7 +47,9 @@ const History = () => {
             {loading ? (
               <p className="text-sm text-muted-foreground">Đang tải...</p>
             ) : items.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Chưa có lịch sử trò chuyện.</p>
+              <p className="text-sm text-muted-foreground">
+                Chưa có lịch sử trò chuyện.
+              </p>
             ) : (
               <ul className="divide-y rounded-lg border bg-card">
                 {items.map((it) => (
@@ -64,7 +66,8 @@ const History = () => {
                         {it.title || it.content_preview || "Không có tiêu đề"}
                       </div>
                       <div className="text-xs text-muted-foreground mt-1">
-                        {new Date(it.created_at).toLocaleString("vi-VN")} {it.feature_key ? `• ${it.feature_key}` : ""}
+                        {new Date(it.created_at).toLocaleString("vi-VN")}{" "}
+                        {it.feature_key ? `• ${it.feature_key}` : ""}
                       </div>
                     </div>
                   </li>
