@@ -96,7 +96,7 @@
 - ai_message
 ```
 event: ai_message
-data: {"chunk": {"content": "Xin chào"}, "model": "google:gemini-2.5-flash"}
+data: {"chunk": {"content": "Xin chào"}, "model": "google:gemini-3-flash-preview"}
 ```
 
 - conversation_created

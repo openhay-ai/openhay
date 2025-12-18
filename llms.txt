@@ -67,7 +67,7 @@ curl -N -X POST https://<host>/api/translate/url \
 
 Optional:
 
-- LLM providers (defaults): google: gemini-2.5-flash; research models also Gemini with thinking enabled
+- LLM providers (defaults): google: gemini-3-flash-preview; research models also Gemini with thinking enabled
 - Environment:
   - Required: DATABASE_URL
   - Important: JWT_SECRET_KEY (prod), BRAVE_API_KEY, LOGFIRE_TOKEN

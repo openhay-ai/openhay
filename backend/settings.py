@@ -15,11 +15,11 @@ class Settings(BaseSettings):
 
     # LLM Providers
     llm_provider: Literal["openai", "anthropic", "google", "ollama"] = "google"
-    llm_model: str = "gemini-2.5-flash"
+    llm_model: str = "gemini-3-flash-preview"
 
     # For deep research
-    lead_research_llm_model: str = "gemini-2.5-flash"
-    subagent_research_llm_model: str = "gemini-2.5-flash"
+    lead_research_llm_model: str = "gemini-3-flash-preview"
+    subagent_research_llm_model: str = "gemini-3-flash-preview"
 
     google_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
@@ -130,7 +130,9 @@ class Settings(BaseSettings):
         elif self.llm_provider == "ollama":
             from pydantic_ai.providers.ollama import OllamaProvider
 
-            assert self.ollama_base_url is not None, "OLLAMA_BASE_URL must be set to use Ollama"
+            assert (
+                self.ollama_base_url is not None
+            ), "OLLAMA_BASE_URL must be set to use Ollama"
             return OpenAIModel(
                 model_name=self.llm_model,
                 provider=OllamaProvider(base_url=self.ollama_base_url),

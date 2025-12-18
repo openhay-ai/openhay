@@ -16,7 +16,7 @@ def _resolve_provider_and_model(model_name: str) -> tuple[str, str]:
     """Split provider and model by the first colon.
 
     Examples:
-        "google-gla:gemini-2.5-flash" -> ("google-gla", "gemini-2.5-flash")
+        "google-gla:gemini-3-flash-preview" -> ("google-gla", "gemini-3-flash-preview")
         "openai:gpt-4o" -> ("openai", "gpt-4o")
         "ollama:qwen3:8b" -> ("ollama", "qwen3:8b")
     """

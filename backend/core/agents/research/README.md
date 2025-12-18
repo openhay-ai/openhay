@@ -56,4 +56,4 @@ graph TD
     - Inserts inline numeric citations (e.g., `[1]`, `[2]`).
     - Generates a bibliography mapping citations to source URLs and titles.
 
-This architecture ensures the final output is thorough, verifiable, and well-supported by evidence. The use of `gemini-2.5-flash` optimizes for speed and cost.
+This architecture ensures the final output is thorough, verifiable, and well-supported by evidence. The use of `gemini-3-flash-preview` optimizes for speed and cost.
