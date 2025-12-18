@@ -34,7 +34,7 @@ Note that usage is limited and system may raise overload error.
 
 -   **Q&A with Citations**: Delivers reliable, LLM-generated answers with citations extracted from web sources.
 -   **Daily News Gathering**: An autonomous agent crawls predefined Vietnamese news sites, using an LLM to select and summarize the most significant articles. For technical details, see the [**Discover Agent README**](./backend/core/agents/discover/README.md).
--   **Deep Research Agent**: A hierarchical, multi-agent system for conducting in-depth, autonomous research. It parallelizes web investigation across multiple sub-agents and synthesizes their findings into a final, cited report. This system is optimized for performance and cost-efficiency using `gemini-2.5-flash`. For a detailed architectural breakdown, read the [**Research Agent README**](./backend/core/agents/research/README.md).
+-   **Deep Research Agent**: A hierarchical, multi-agent system for conducting in-depth, autonomous research. It parallelizes web investigation across multiple sub-agents and synthesizes their findings into a final, cited report. This system is optimized for performance and cost-efficiency using `gemini-3-flash-preview`. For a detailed architectural breakdown, read the [**Research Agent README**](./backend/core/agents/research/README.md).
 -   **Translation**: Translates content from web links or uploaded documents (PDF, DOCX, etc.) while preserving context and technical terms.
 
 ## Getting Started

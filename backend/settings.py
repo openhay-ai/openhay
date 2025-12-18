@@ -15,11 +15,11 @@ class Settings(BaseSettings):
 
     # LLM Providers
     llm_provider: Literal["openai", "anthropic", "google", "ollama"] = "google"
-    llm_model: str = "gemini-2.5-flash"
+    llm_model: str = "gemini-3-flash-preview"
 
     # For deep research
-    lead_research_llm_model: str = "gemini-2.5-flash"
-    subagent_research_llm_model: str = "gemini-2.5-flash"
+    lead_research_llm_model: str = "gemini-3-flash-preview"
+    subagent_research_llm_model: str = "gemini-3-flash-preview"
 
     google_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
