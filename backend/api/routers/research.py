@@ -26,7 +26,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel, Field
-from pydantic_ai import Agent
+from pydantic_ai import Agent, DeferredToolRequests, ExternalToolset, ToolDefinition
 from pydantic_ai.messages import (
     FinalResultEvent,
     FunctionToolCallEvent,
@@ -40,9 +40,6 @@ from pydantic_ai.messages import (
     ThinkingPartDelta,
     ToolReturnPart,
 )
-from pydantic_ai.output import DeferredToolCalls
-from pydantic_ai.tools import ToolDefinition
-from pydantic_ai.toolsets import DeferredToolset
 
 router = APIRouter(prefix="/api/research", tags=["research"])
 
@@ -102,7 +99,7 @@ async def run_research(payload: ResearchRequest, current_user: CurrentUser) -> S
             ),
         ),
     ]
-    deferred_toolset = DeferredToolset(deferred_tools)
+    deferred_toolset = ExternalToolset(deferred_tools)
 
     async def generator():
         run_id = str(uuid4())
@@ -236,7 +233,7 @@ async def run_research(payload: ResearchRequest, current_user: CurrentUser) -> S
                     toolsets=[deferred_toolset],
                     output_type=[
                         lead_research_agent.output_type,
-                        DeferredToolCalls,
+                        DeferredToolRequests,
                     ],  # type: ignore[arg-type]
                 ) as lead_run:
                     async for node in lead_run:
@@ -396,10 +393,10 @@ async def run_research(payload: ResearchRequest, current_user: CurrentUser) -> S
                     except Exception:
                         logger.exception("Failed to persist research lead messages run")
 
-                    # Otherwise we expect DeferredToolCalls
-                    if isinstance(lead_run.result.output, DeferredToolCalls):
+                    # Otherwise we expect DeferredToolRequests
+                    if isinstance(lead_run.result.output, DeferredToolRequests):
                         tool_return_messages: list[ModelRequest] = []
-                        for call in lead_run.result.output.tool_calls:
+                        for call in lead_run.result.output.calls:
                             logger.debug(f"call: {call.args_as_dict()}")
                             if call.tool_name == "run_parallel_subagents":
                                 args = call.args_as_dict()
