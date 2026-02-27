@@ -16,11 +16,9 @@
 
 ---
 
-## Live Demo
+## Live Demo (Sadly, we shut it down...)
 
-Check out the live deployed version of OpenHay at https://www.openhay.vn
-
-Note that usage is limited and system may raise overload error.
+~Check out the live deployed version of OpenHay at https://www.openhay.vn~
 
 ---
 
